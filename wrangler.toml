@@ -1,0 +1,14 @@
+name = "inventory-backend"
+main = "src/index.js"
+compatibility_date = "2025-11-21"
+
+[vars]
+JWT_SECRET = "your_super_secret_jwt_key_here"
+GOOGLE_CLIENT_ID = "your_google_client_id"
+GOOGLE_CLIENT_SECRET = "your_google_client_secret"
+
+# Correct format
+[[d1_databases]]
+binding = "DB"
+database_name = "invo-manage"
+database_id = "bac71afc-cbb8-4718-96fa-11eac9e79edb"
