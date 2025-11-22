@@ -1,4 +1,4 @@
-import { Router } from 'itty-router';
+import { Router } from './utils/customRouter';
 import { getDb } from './utils/db'; // Import getDb
 import bcrypt from 'bcryptjs'; // For password hashing
 import { SignJWT, jwtVerify } from 'jose'; // For JWT
@@ -50,7 +50,23 @@ CREATE TABLE IF NOT EXISTS users (
 );
 `;
 
-const router = Router();
+const router = new Router();
+
+// CORS handling (placed first to act as middleware)
+router.all('*', (request) => {
+    // Handle preflight OPTIONS requests
+    if (request.method === 'OPTIONS') {
+        return new Response(null, {
+            headers: {
+                'Access-Control-Allow-Origin': 'http://localhost:3000', // Allow your frontend origin
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+                'Access-Control-Max-Age': '86400', // Cache preflight for 24 hours
+            },
+        });
+    }
+    return undefined; // Explicitly return undefined for non-OPTIONS requests to continue routing
+});
 
 // Helper function to generate JWT token
 async function generateToken(user_id, env) {
@@ -79,22 +95,7 @@ async function authenticate(request, env) {
     }
 }
 
-// CORS Middleware
-const corsMiddleware = (request) => {
-    // Handle preflight OPTIONS requests
-    if (request.method === 'OPTIONS') {
-        return new Response(null, {
-            headers: {
-                'Access-Control-Allow-Origin': 'http://localhost:3000', // Allow your frontend origin
-                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-                'Access-Control-Max-Age': '86400', // Cache preflight for 24 hours
-            },
-        });
-    }
-};
-
-// Add CORS headers to all responses
+// Add CORS headers to all responses (applied at the end of fetch)
 const addCorsHeaders = (response) => {
     response.headers.set('Access-Control-Allow-Origin', 'http://localhost:3000');
     response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -102,9 +103,6 @@ const addCorsHeaders = (response) => {
     response.headers.set('Access-Control-Allow-Credentials', 'true'); // Important for sending cookies/auth headers
     return response;
 };
-
-// Apply CORS middleware before all routes
-router.all('*', corsMiddleware);
 
 
 router.get('/', () => {
@@ -225,6 +223,7 @@ router.post('/api/auth/login', async (request, env) => {
     } catch (error) {
         return new Response(`Error logging in: ${error.message}`, { status: 500 });
     }
+    
 });
 
 // Google OAuth
@@ -305,7 +304,7 @@ router.get('/api/auth/google/callback', async (request, env) => {
 
 
 // Dashboard Statistics (protected)
-router.get('/api/dashboard', authenticate, async (request, env) => {
+router.get('/api/dashboard', async (request, env) => {
     const db = getDb(env.DB);
     try {
         const stats = await db.getDashboardStats();
@@ -318,7 +317,7 @@ router.get('/api/dashboard', authenticate, async (request, env) => {
 });
 
 // Labs CRUD operations (protected)
-router.get('/api/labs', authenticate, async (request, env) => {
+router.get('/api/labs', async (request, env) => {
     const db = getDb(env.DB);
     try {
         const labs = await db.getAllLabs();
@@ -330,7 +329,7 @@ router.get('/api/labs', authenticate, async (request, env) => {
     }
 });
 
-router.post('/api/labs', authenticate, async (request, env) => {
+router.post('/api/labs', async (request, env) => {
     const db = getDb(env.DB);
     try {
         const { lab_name, location, capacity } = await request.json();
@@ -351,7 +350,7 @@ router.post('/api/labs', authenticate, async (request, env) => {
     }
 });
 
-router.get('/api/labs/:id', authenticate, async (request, env) => {
+router.get('/api/labs/:id', async (request, env) => {
     const db = getDb(env.DB);
     try {
         const { id } = request.params;
@@ -368,7 +367,7 @@ router.get('/api/labs/:id', authenticate, async (request, env) => {
     }
 });
 
-router.put('/api/labs/:id', authenticate, async (request, env) => {
+router.put('/api/labs/:id', async (request, env) => {
     const db = getDb(env.DB);
     try {
         const { id } = request.params;
@@ -390,7 +389,7 @@ router.put('/api/labs/:id', authenticate, async (request, env) => {
     }
 });
 
-router.delete('/api/labs/:id', authenticate, async (request, env) => {
+router.delete('/api/labs/:id', async (request, env) => {
     const db = getDb(env.DB);
     try {
         const { id } = request.params;
@@ -409,7 +408,7 @@ router.delete('/api/labs/:id', authenticate, async (request, env) => {
 });
 
 // Faculty CRUD operations (protected)
-router.get('/api/faculty', authenticate, async (request, env) => {
+router.get('/api/faculty', async (request, env) => {
     const db = getDb(env.DB);
     try {
         const faculty = await db.getAllFaculty();
@@ -421,7 +420,7 @@ router.get('/api/faculty', authenticate, async (request, env) => {
     }
 });
 
-router.post('/api/faculty', authenticate, async (request, env) => {
+router.post('/api/faculty', async (request, env) => {
     const db = getDb(env.DB);
     try {
         const { faculty_name, email, department } = await request.json();
@@ -442,7 +441,7 @@ router.post('/api/faculty', authenticate, async (request, env) => {
     }
 });
 
-router.get('/api/faculty/:id', authenticate, async (request, env) => {
+router.get('/api/faculty/:id', async (request, env) => {
     const db = getDb(env.DB);
     try {
         const { id } = request.params;
@@ -459,7 +458,7 @@ router.get('/api/faculty/:id', authenticate, async (request, env) => {
     }
 });
 
-router.put('/api/faculty/:id', authenticate, async (request, env) => {
+router.put('/api/faculty/:id', async (request, env) => {
     const db = getDb(env.DB);
     try {
         const { id } = request.params;
@@ -481,7 +480,7 @@ router.put('/api/faculty/:id', authenticate, async (request, env) => {
     }
 });
 
-router.delete('/api/faculty/:id', authenticate, async (request, env) => {
+router.delete('/api/faculty/:id', async (request, env) => {
     const db = getDb(env.DB);
     try {
         const { id } = request.params;
@@ -500,98 +499,7 @@ router.delete('/api/faculty/:id', authenticate, async (request, env) => {
 });
 
 // Devices CRUD operations (protected)
-router.get('/api/devices', authenticate, async (request, env) => {
-    const db = getDb(env.DB);
-    try {
-        const devices = await db.getAllDevices();
-        return new Response(JSON.stringify(devices), {
-            headers: { 'Content-Type': 'application/json' },
-        });
-    } catch (error) {
-        return new Response(`Error fetching devices: ${error.message}`, { status: 500 });
-    }
-});
-
-router.post('/api/devices', authenticate, async (request, env) => {
-    const db = getDb(env.DB);
-    try {
-        const { device_name, device_type, configuration, status, lab_id, faculty_id } = await request.json();
-        if (!device_name || !device_type) {
-            return new Response('Device name and type are required', { status: 400 });
-        }
-        const success = await db.createDevice(device_name, device_type, configuration, status, lab_id, faculty_id);
-        if (success) {
-            return new Response(JSON.stringify({ message: 'Device created successfully' }), {
-                status: 201,
-                headers: { 'Content-Type': 'application/json' },
-            });
-        } else {
-            return new Response('Failed to create device', { status: 500 });
-        }
-    } catch (error) {
-        return new Response(`Error creating device: ${error.message}`, { status: 500 });
-    }
-});
-
-router.get('/api/devices/:id', authenticate, async (request, env) => {
-    const db = getDb(env.DB);
-    try {
-        const { id } = request.params;
-        const device = await db.getDeviceById(id);
-        if (device) {
-            return new Response(JSON.stringify(device), {
-                headers: { 'Content-Type': 'application/json' },
-            });
-        } else {
-            return new Response('Device not found', { status: 404 });
-        }
-    } catch (error) {
-        return new Response(`Error fetching device: ${error.message}`, { status: 500 });
-    }
-});
-
-router.put('/api/devices/:id', authenticate, async (request, env) => {
-    const db = getDb(env.DB);
-    try {
-        const { id } = request.params;
-        const { device_name, device_type, configuration, status, lab_id, faculty_id } = await request.json();
-        if (!device_name || !device_type) {
-            return new Response('Device name and type are required', { status: 400 });
-        }
-        const success = await db.updateDevice(id, device_name, device_type, configuration, status, lab_id, faculty_id);
-        if (success) {
-            return new Response(JSON.stringify({ message: 'Device updated successfully' }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-            });
-        } else {
-            return new Response('Failed to update device', { status: 500 });
-        }
-    } catch (error) {
-        return new Response(`Error updating device: ${error.message}`, { status: 500 });
-    }
-});
-
-router.delete('/api/devices/:id', authenticate, async (request, env) => {
-    const db = getDb(env.DB);
-    try {
-        const { id } = request.params;
-        const success = await db.deleteDevice(id);
-        if (success) {
-            return new Response(JSON.stringify({ message: 'Device deleted successfully' }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-            });
-        } else {
-            return new Response('Failed to delete device', { status: 500 });
-        }
-    } catch (error) {
-        return new Response(`Error deleting device: ${error.message}`, { status: 500 });
-    }
-});
-
-// Device Management routes (protected)
-router.put('/api/devices/:id/reassign', authenticate, async (request, env) => {
+router.put('/api/devices/:id/reassign', async (request, env) => {
     const db = getDb(env.DB);
     try {
         const { id } = request.params;
@@ -613,7 +521,7 @@ router.put('/api/devices/:id/reassign', authenticate, async (request, env) => {
     }
 });
 
-router.put('/api/devices/:id/deselect', authenticate, async (request, env) => {
+router.put('/api/devices/:id/deselect', async (request, env) => {
     const db = getDb(env.DB);
     try {
         const { id } = request.params;
@@ -631,7 +539,7 @@ router.put('/api/devices/:id/deselect', authenticate, async (request, env) => {
     }
 });
 
-router.put('/api/devices/:id/deadstock', authenticate, async (request, env) => {
+router.put('/api/devices/:id/deadstock', async (request, env) => {
     const db = getDb(env.DB);
     try {
         const { id } = request.params;
@@ -649,11 +557,19 @@ router.put('/api/devices/:id/deadstock', authenticate, async (request, env) => {
     }
 });
 
-
+// Final 404 handler (placed last)
 router.all('*', () => new Response('Not Found.', { status: 404 }));
 
 export default {
 	async fetch(request, env, ctx) {
-		return router.handle(request, env, ctx);
+        console.log('--- fetch handler start ---');
+		const response = await router.handle(request, env, ctx);
+        console.log('Response from router.handle:', response);
+        if (response instanceof Response) {
+            return addCorsHeaders(response);
+        }
+        // If router.handle somehow returns something that is not a Response object,
+        // return a 500 Internal Server Error.
+        return new Response('Internal Server Error: Router did not return a valid Response.', { status: 500 });
 	},
 };

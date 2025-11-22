@@ -153,21 +153,43 @@ export const getDb = (db) => {
 
         // Dashboard Statistics
         async getDashboardStats() {
-            const totalLabs = await db.prepare('SELECT COUNT(*) as count FROM labs').first();
-            const totalFaculty = await db.prepare('SELECT COUNT(*) as count FROM faculty').first();
-            const totalDevices = await db.prepare('SELECT COUNT(*) as count FROM devices').first();
-            const totalComputers = await db.prepare('SELECT COUNT(*) as count FROM devices WHERE device_type = "computer"').first();
-            const totalPrinters = await db.prepare('SELECT COUNT(*) as count FROM devices WHERE device_type = "printer"').first();
-            const totalDeadStock = await db.prepare('SELECT COUNT(*) as count FROM devices WHERE status = "dead_stock"').first();
+            try {
+                console.log('Fetching totalLabs...');
+                const totalLabs = await db.prepare('SELECT COUNT(*) as count FROM labs').first();
+                console.log('totalLabs:', totalLabs);
 
-            return {
-                totalLabs: totalLabs.count,
-                totalFaculty: totalFaculty.count,
-                totalDevices: totalDevices.count,
-                totalComputers: totalComputers.count,
-                totalPrinters: totalPrinters.count,
-                totalDeadStock: totalDeadStock.count,
-            };
+                console.log('Fetching totalFaculty...');
+                const totalFaculty = await db.prepare('SELECT COUNT(*) as count FROM faculty').first();
+                console.log('totalFaculty:', totalFaculty);
+
+                console.log('Fetching totalDevices...');
+                const totalDevices = await db.prepare('SELECT COUNT(*) as count FROM devices').first();
+                console.log('totalDevices:', totalDevices);
+
+                console.log('Fetching totalComputers...');
+                const totalComputers = await db.prepare('SELECT COUNT(*) as count FROM devices WHERE device_type = "computer"').first();
+                console.log('totalComputers:', totalComputers);
+
+                console.log('Fetching totalPrinters...');
+                const totalPrinters = await db.prepare('SELECT COUNT(*) as count FROM devices WHERE device_type = "printer"').first();
+                console.log('totalPrinters:', totalPrinters);
+
+                console.log('Fetching totalDeadStock...');
+                const totalDeadStock = await db.prepare('SELECT COUNT(*) as count FROM devices WHERE status = "dead_stock"').first();
+                console.log('totalDeadStock:', totalDeadStock);
+
+                return {
+                    totalLabs: totalLabs.count,
+                    totalFaculty: totalFaculty.count,
+                    totalDevices: totalDevices.count,
+                    totalComputers: totalComputers.count,
+                    totalPrinters: totalPrinters.count,
+                    totalDeadStock: totalDeadStock.count,
+                };
+            } catch (error) {
+                console.error('Error in getDashboardStats:', error);
+                throw error; // Re-throw the error so it can be caught by the route handler
+            }
         },
     };
 };
