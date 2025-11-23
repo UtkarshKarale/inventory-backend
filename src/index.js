@@ -137,17 +137,26 @@ router.get('/api/init-db', async (request, env) => {
         `);
         await env.DB.exec(`
             CREATE TABLE IF NOT EXISTS devices (
-              device_id INTEGER PRIMARY KEY AUTOINCREMENT,
-              device_name TEXT NOT NULL,
-              device_type TEXT NOT NULL,
-              configuration TEXT,
-              status TEXT DEFAULT 'active',
-              lab_id INTEGER,
-              faculty_id INTEGER,
-              created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-              updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-              FOREIGN KEY (lab_id) REFERENCES labs (lab_id) ON DELETE SET NULL,
-              FOREIGN KEY (faculty_id) REFERENCES faculty (faculty_id) ON DELETE SET NULL
+                device_id   INTEGER      PRIMARY KEY AUTOINCREMENT,
+                lab_id      INTEGER,
+                faculty_id  INTEGER,
+                device_name TEXT         NOT NULL,
+                company     TEXT,
+                lab_location TEXT,
+                device_type TEXT         NOT NULL,
+                status      TEXT         NOT NULL,
+                price       REAL         NOT NULL,
+                ram         INTEGER,
+                storage     INTEGER,
+                cpu         TEXT,
+                gpu         TEXT,
+                last_maintenance_date TEXT,
+                ink_levels  INTEGER,
+                display_size REAL,
+                created_at  TEXT         DEFAULT CURRENT_TIMESTAMP,
+                updated_at  TEXT         DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (lab_id) REFERENCES labs(lab_id) ON DELETE SET NULL,
+                FOREIGN KEY (faculty_id) REFERENCES faculty(faculty_id) ON DELETE SET NULL
             );
         `);
         await env.DB.exec(`
@@ -499,6 +508,90 @@ router.delete('/api/faculty/:id', async (request, env) => {
 });
 
 // Devices CRUD operations (protected)
+router.get('/api/devices', async (request, env) => {
+	const db = getDb(env.DB);
+	try {
+		const devices = await db.getAllDevices();
+		return new Response(JSON.stringify(devices), {
+			headers: { 'Content-Type': 'application/json' },
+		});
+	} catch (error) {
+		return new Response(`Error fetching devices: ${error.message}`, { status: 500 });
+	}
+});
+
+router.post('/api/devices', async (request, env) => {
+	const db = getDb(env.DB);
+	try {
+		const deviceData = await request.json();
+		const success = await db.createDevice(deviceData);
+		if (success) {
+			return new Response(JSON.stringify({ message: 'Device created successfully' }), {
+				status: 201,
+				headers: { 'Content-Type': 'application/json' },
+			});
+		} else {
+			return new Response('Failed to create device', { status: 500 });
+		}
+	} catch (error) {
+		return new Response(`Error creating device: ${error.message}`, { status: 500 });
+	}
+});
+
+router.get('/api/devices/:id', async (request, env) => {
+	const db = getDb(env.DB);
+	try {
+		const { id } = request.params;
+		const device = await db.getDeviceById(id);
+		if (device) {
+			return new Response(JSON.stringify(device), {
+				headers: { 'Content-Type': 'application/json' },
+			});
+		} else {
+			return new Response('Device not found', { status: 404 });
+		}
+	} catch (error) {
+		return new Response(`Error fetching device: ${error.message}`, { status: 500 });
+	}
+});
+
+router.put('/api/devices/:id', async (request, env) => {
+	const db = getDb(env.DB);
+	try {
+		const { id } = request.params;
+		const deviceData = await request.json();
+		const success = await db.updateDevice(id, deviceData);
+		if (success) {
+			return new Response(JSON.stringify({ message: 'Device updated successfully' }), {
+				status: 200,
+				headers: { 'Content-Type': 'application/json' },
+			});
+		} else {
+			return new Response('Failed to update device', { status: 500 });
+		}
+	} catch (error) {
+		return new Response(`Error updating device: ${error.message}`, { status: 500 });
+	}
+});
+
+router.delete('/api/devices/:id', async (request, env) => {
+	const db = getDb(env.DB);
+	try {
+		const { id } = request.params;
+		const success = await db.deleteDevice(id);
+		if (success) {
+			return new Response(JSON.stringify({ message: 'Device deleted successfully' }), {
+				status: 200,
+				headers: { 'Content-Type': 'application/json' },
+			});
+		} else {
+			return new Response('Failed to delete device', { status: 500 });
+		}
+	} catch (error) {
+		return new Response(`Error deleting device: ${error.message}`, { status: 500 });
+	}
+});
+
 router.put('/api/devices/:id/reassign', async (request, env) => {
     const db = getDb(env.DB);
     try {

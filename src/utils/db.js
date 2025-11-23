@@ -71,19 +71,25 @@ export const getDb = (db) => {
             const { results } = await db.prepare('SELECT * FROM devices WHERE device_id = ?').bind(id).all();
             return results[0];
         },
-        async createDevice(device_name, device_type, configuration, status, lab_id, faculty_id) {
+        async createDevice(deviceData) {
+            const {
+                lab_id, faculty_id, device_name, company, lab_location, device_type, status, price, ram, storage, cpu, gpu, last_maintenance_date, ink_levels, display_size
+            } = deviceData;
             const { success } = await db.prepare(
-                'INSERT INTO devices (device_name, device_type, configuration, status, lab_id, faculty_id) VALUES (?, ?, ?, ?, ?, ?)'
+                'INSERT INTO devices (lab_id, faculty_id, device_name, company, lab_location, device_type, status, price, ram, storage, cpu, gpu, last_maintenance_date, ink_levels, display_size) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             )
-            .bind(device_name, device_type, configuration, status, lab_id, faculty_id)
+            .bind(lab_id, faculty_id, device_name, company, lab_location, device_type, status, price, ram, storage, cpu, gpu, last_maintenance_date, ink_levels, display_size)
             .run();
             return success;
         },
-        async updateDevice(id, device_name, device_type, configuration, status, lab_id, faculty_id) {
+        async updateDevice(id, deviceData) {
+            const {
+                lab_id, faculty_id, device_name, company, lab_location, device_type, status, price, ram, storage, cpu, gpu, last_maintenance_date, ink_levels, display_size
+            } = deviceData;
             const { success } = await db.prepare(
-                'UPDATE devices SET device_name = ?, device_type = ?, configuration = ?, status = ?, lab_id = ?, faculty_id = ?, updated_at = CURRENT_TIMESTAMP WHERE device_id = ?'
+                'UPDATE devices SET lab_id = ?, faculty_id = ?, device_name = ?, company = ?, lab_location = ?, device_type = ?, status = ?, price = ?, ram = ?, storage = ?, cpu = ?, gpu = ?, last_maintenance_date = ?, ink_levels = ?, display_size = ?, updated_at = CURRENT_TIMESTAMP WHERE device_id = ?'
             )
-            .bind(device_name, device_type, configuration, status, lab_id, faculty_id, id)
+            .bind(lab_id, faculty_id, device_name, company, lab_location, device_type, status, price, ram, storage, cpu, gpu, last_maintenance_date, ink_levels, display_size, id)
             .run();
             return success;
         },
