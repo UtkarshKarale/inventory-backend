@@ -20,7 +20,8 @@ CREATE TABLE faculty (
   faculty_name TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
   department TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  location TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 

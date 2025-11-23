@@ -325,6 +325,80 @@ router.get('/api/dashboard', async (request, env) => {
     }
 });
 
+router.get('/api/reports/system-status', async (request, env) => {
+    const db = getDb(env.DB);
+    try {
+        const reportData = await db.getSystemStatusReportData();
+        return new Response(JSON.stringify(reportData), {
+            headers: { 'Content-Type': 'application/json' },
+        });
+    } catch (error) {
+        return new Response(`Error fetching system status report: ${error.message}`, { status: 500 });
+    }
+});
+
+router.get('/api/reports/dead-stock', async (request, env) => {
+    const db = getDb(env.DB);
+    try {
+        const reportData = await db.getDeadStockReportData();
+        return new Response(JSON.stringify(reportData), {
+            headers: { 'Content-Type': 'application/json' },
+        });
+    } catch (error) {
+        return new Response(`Error fetching dead stock report: ${error.message}`, { status: 500 });
+    }
+});
+
+router.get('/api/reports/faculty-inventory', async (request, env) => {
+    const db = getDb(env.DB);
+    try {
+        const reportData = await db.getFacultyInventoryReportData();
+        return new Response(JSON.stringify(reportData), {
+            headers: { 'Content-Type': 'application/json' },
+        });
+    } catch (error) {
+        return new Response(`Error fetching faculty inventory report: ${error.message}`, { status: 500 });
+    }
+});
+
+router.get('/api/reports/lab-wise', async (request, env) => {
+    const db = getDb(env.DB);
+    try {
+        const reportData = await db.getLabWiseReportData();
+        return new Response(JSON.stringify(reportData), {
+            headers: { 'Content-Type': 'application/json' },
+        });
+    } catch (error) {
+        return new Response(`Error fetching lab-wise report: ${error.message}`, { status: 500 });
+    }
+});
+
+// Reports Endpoints
+router.get('/api/reports/complete-inventory', async (request, env) => {
+    const db = getDb(env.DB);
+    try {
+        const reportData = await db.getCompleteInventoryReportData();
+        return new Response(JSON.stringify(reportData), {
+            headers: { 'Content-Type': 'application/json' },
+        });
+    } catch (error) {
+        return new Response(`Error fetching complete inventory report: ${error.message}`, { status: 500 });
+    }
+});
+
+// Helper to get HOD Cabin Lab ID
+router.get('/api/hod-cabin-lab-id', async (request, env) => {
+    const db = getDb(env.DB);
+    try {
+        const hodCabinLabId = await db.getOrCreateHodCabinLabId();
+        return new Response(JSON.stringify({ hodCabinLabId }), {
+            headers: { 'Content-Type': 'application/json' },
+        });
+    } catch (error) {
+        return new Response(`Error fetching/creating HOD Cabin lab ID: ${error.message}`, { status: 500 });
+    }
+});
+
 // Labs CRUD operations (protected)
 router.get('/api/labs', async (request, env) => {
     const db = getDb(env.DB);
@@ -432,11 +506,11 @@ router.get('/api/faculty', async (request, env) => {
 router.post('/api/faculty', async (request, env) => {
     const db = getDb(env.DB);
     try {
-        const { faculty_name, email, department } = await request.json();
+        const { faculty_name, email, department, location } = await request.json();
         if (!faculty_name || !email) {
             return new Response('Faculty name and email are required', { status: 400 });
         }
-        const success = await db.createFaculty(faculty_name, email, department);
+        const success = await db.createFaculty(faculty_name, email, department, location);
         if (success) {
             return new Response(JSON.stringify({ message: 'Faculty created successfully' }), {
                 status: 201,
@@ -471,11 +545,11 @@ router.put('/api/faculty/:id', async (request, env) => {
     const db = getDb(env.DB);
     try {
         const { id } = request.params;
-        const { faculty_name, email, department } = await request.json();
+        const { faculty_name, email, department, location } = await request.json();
         if (!faculty_name || !email) {
             return new Response('Faculty name and email are required', { status: 400 });
         }
-        const success = await db.updateFaculty(id, faculty_name, email, department);
+        const success = await db.updateFaculty(id, faculty_name, email, department, location);
         if (success) {
             return new Response(JSON.stringify({ message: 'Faculty updated successfully' }), {
                 status: 200,
@@ -511,7 +585,10 @@ router.delete('/api/faculty/:id', async (request, env) => {
 router.get('/api/devices', async (request, env) => {
 	const db = getDb(env.DB);
 	try {
-		const devices = await db.getAllDevices();
+        const url = new URL(request.url);
+        const lab_id = url.searchParams.get('lab_id');
+        const faculty_id = url.searchParams.get('faculty_id');
+		const devices = await db.getAllDevices({ lab_id, faculty_id });
 		return new Response(JSON.stringify(devices), {
 			headers: { 'Content-Type': 'application/json' },
 		});
