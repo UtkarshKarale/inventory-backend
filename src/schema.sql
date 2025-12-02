@@ -35,7 +35,6 @@ CREATE TABLE devices (
     lab_location TEXT,
     device_type TEXT         NOT NULL CHECK(device_type IN ('laptop', 'desktop', 'mouse', 'keyboard', 'monitor', 'printer', 'server')),
     status      TEXT         NOT NULL, -- available, in-use, maintenance, etc.
-    price       REAL         NOT NULL,
     ram         INTEGER, -- in GB
     storage     INTEGER, -- in GB
     cpu         TEXT,
@@ -43,6 +42,8 @@ CREATE TABLE devices (
     last_maintenance_date TEXT,
     ink_levels  INTEGER, -- for printers
     display_size REAL, -- in inches
+    invoice_number TEXT,
+    invoice_pdf TEXT,
     created_at  TEXT         DEFAULT CURRENT_TIMESTAMP,
     updated_at  TEXT         DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (lab_id) REFERENCES labs(lab_id) ON DELETE SET NULL,

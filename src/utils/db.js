@@ -42,10 +42,12 @@ export const getDb = (db) => {
             return results[0];
         },
         async createFaculty(faculty_name, email, department, location) {
+            const normalizedEmail = email.trim().toLowerCase();
+            console.log('Attempting to create faculty with normalized email:', normalizedEmail);
             const { success } = await db.prepare(
                 'INSERT INTO faculty (faculty_name, email, department, location) VALUES (?, ?, ?, ?)'
             )
-            .bind(faculty_name, email, department, location)
+            .bind(faculty_name, normalizedEmail, department, location)
             .run();
             return success;
         },
@@ -63,12 +65,12 @@ export const getDb = (db) => {
         },
 
         // Devices CRUD
-        async getAllDevices({ lab_id = null, faculty_id = null, status = null } = {}) {
-            let query = 'SELECT * FROM devices';
+        async getAllDevices({ lab_id = null, faculty_id = null, status = null, device_type = null } = {}) {
+            let query = "SELECT device_id, lab_id, faculty_id, device_name, company, lab_location, device_type, status, ram, storage, cpu, gpu, last_maintenance_date, ink_levels, display_size, invoice_number, updated_at, CASE WHEN invoice_pdf IS NOT NULL AND invoice_pdf != '' THEN 1 ELSE 0 END as has_invoice_pdf FROM devices";
             const conditions = [];
             const bindings = [];
             
-            if (lab_id !== null) { // Use !== null to distinguish from 0 or empty string if those were valid IDs
+            if (lab_id !== null) {
                 conditions.push('lab_id = ?');
                 bindings.push(lab_id);
             }
@@ -79,6 +81,15 @@ export const getDb = (db) => {
             if (status !== null) {
                 conditions.push('status = ?');
                 bindings.push(status);
+            }
+            if (device_type !== null) {
+                if (Array.isArray(device_type)) {
+                    conditions.push(`TRIM(device_type) IN (${device_type.map(() => '?').join(', ')})`);
+                    bindings.push(...device_type);
+                } else {
+                    conditions.push('TRIM(device_type) = ?');
+                    bindings.push(device_type);
+                }
             }
 
             if (conditions.length > 0) {
@@ -94,23 +105,38 @@ export const getDb = (db) => {
         },
         async createDevice(deviceData) {
             const {
-                lab_id, faculty_id, device_name, company, lab_location, device_type, status, price, ram, storage, cpu, gpu, last_maintenance_date, ink_levels, display_size
+                lab_id = null,
+                faculty_id = null,
+                device_name,
+                company = null,
+                lab_location = null,
+                device_type,
+                status,
+                ram = null,
+                storage = null,
+                cpu = null,
+                gpu = null,
+                last_maintenance_date = null,
+                ink_levels = null,
+                display_size = null,
+                invoice_number = null,
+                invoice_pdf = null
             } = deviceData;
             const { success } = await db.prepare(
-                'INSERT INTO devices (lab_id, faculty_id, device_name, company, lab_location, device_type, status, price, ram, storage, cpu, gpu, last_maintenance_date, ink_levels, display_size) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                'INSERT INTO devices (lab_id, faculty_id, device_name, company, lab_location, device_type, status, ram, storage, cpu, gpu, last_maintenance_date, ink_levels, display_size, invoice_number, invoice_pdf) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             )
-            .bind(lab_id, faculty_id, device_name, company, lab_location, device_type, status, price, ram, storage, cpu, gpu, last_maintenance_date, ink_levels, display_size)
+            .bind(lab_id, faculty_id, device_name, company, lab_location, device_type, status, ram, storage, cpu, gpu, last_maintenance_date, ink_levels, display_size, invoice_number, invoice_pdf)
             .run();
             return success;
         },
         async updateDevice(id, deviceData) {
             const {
-                lab_id, faculty_id, device_name, company, lab_location, device_type, status, price, ram, storage, cpu, gpu, last_maintenance_date, ink_levels, display_size
+                lab_id, faculty_id, device_name, company, lab_location, device_type, status, ram, storage, cpu, gpu, last_maintenance_date, ink_levels, display_size
             } = deviceData;
             const { success } = await db.prepare(
-                'UPDATE devices SET lab_id = ?, faculty_id = ?, device_name = ?, company = ?, lab_location = ?, device_type = ?, status = ?, price = ?, ram = ?, storage = ?, cpu = ?, gpu = ?, last_maintenance_date = ?, ink_levels = ?, display_size = ?, updated_at = CURRENT_TIMESTAMP WHERE device_id = ?'
+                'UPDATE devices SET lab_id = ?, faculty_id = ?, device_name = ?, company = ?, lab_location = ?, device_type = ?, status = ?, ram = ?, storage = ?, cpu = ?, gpu = ?, last_maintenance_date = ?, ink_levels = ?, display_size = ?, updated_at = CURRENT_TIMESTAMP WHERE device_id = ?'
             )
-            .bind(lab_id, faculty_id, device_name, company, lab_location, device_type, status, price, ram, storage, cpu, gpu, last_maintenance_date, ink_levels, display_size, id)
+            .bind(lab_id, faculty_id, device_name, company, lab_location, device_type, status, ram, storage, cpu, gpu, last_maintenance_date, ink_levels, display_size, id)
             .run();
             return success;
         },
@@ -285,8 +311,12 @@ export const getDb = (db) => {
                 const totalLabs = await db.prepare('SELECT COUNT(*) as count FROM labs').first();
                 const totalFaculty = await db.prepare('SELECT COUNT(*) as count FROM faculty').first();
                 const totalDevices = await db.prepare('SELECT COUNT(*) as count FROM devices').first();
-                const totalComputers = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE device_type IN ('laptop', 'desktop', 'server', 'monitor')").first();
-                const totalPrinters = await db.prepare('SELECT COUNT(*) as count FROM devices WHERE device_type = "printer"').first();
+                const totalComputers = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) IN ('laptop', 'desktop', 'server', 'monitor')").first();
+                const totalPrinters = await db.prepare('SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = "printer"').first();
+                const totalDigitalBoards = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'digital_board'").first();
+                const totalPointers = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'pointer'").first();
+                const totalProjectors = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'projector'").first();
+                const totalCPUs = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'cpu'").first();
                 
                 // New, more specific status counts for computers
                 const totalComputersActive = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE device_type IN ('laptop', 'desktop', 'server', 'monitor') AND status = 'active'").first();
@@ -298,6 +328,10 @@ export const getDb = (db) => {
                     totalDevices: totalDevices.count,
                     totalComputers: totalComputers.count,
                     totalPrinters: totalPrinters.count,
+                    totalDigitalBoards: totalDigitalBoards.count,
+                    totalPointers: totalPointers.count,
+                    totalProjectors: totalProjectors.count,
+                    totalCPUs: totalCPUs.count,
                     // Pass the detailed computer status counts to the frontend
                     computersByStatus: {
                         active: totalComputersActive.count,

@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS faculty (
   faculty_name TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
   department TEXT,
+  location TEXT, -- Added location column
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -111,64 +112,65 @@ router.get('/', () => {
 
 router.get('/api/init-db', async (request, env) => {
 	try {
-        // Execute PRAGMA first
-        await env.DB.exec('PRAGMA foreign_keys = ON;');
-
-        // Execute each CREATE TABLE statement separately
-        await env.DB.exec(`
-            CREATE TABLE IF NOT EXISTS labs (
-              lab_id INTEGER PRIMARY KEY AUTOINCREMENT,
-              lab_name TEXT NOT NULL UNIQUE,
-              location TEXT,
-              capacity INTEGER,
-              created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-              updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-            );
-        `);
-        await env.DB.exec(`
-            CREATE TABLE IF NOT EXISTS faculty (
-              faculty_id INTEGER PRIMARY KEY AUTOINCREMENT,
-              faculty_name TEXT NOT NULL,
-              email TEXT NOT NULL UNIQUE,
-              department TEXT,
-              created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-              updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-            );
-        `);
-        await env.DB.exec(`
-            CREATE TABLE IF NOT EXISTS devices (
-                device_id   INTEGER      PRIMARY KEY AUTOINCREMENT,
-                lab_id      INTEGER,
-                faculty_id  INTEGER,
-                device_name TEXT         NOT NULL,
-                company     TEXT,
-                lab_location TEXT,
-                device_type TEXT         NOT NULL,
-                status      TEXT         NOT NULL,
-                price       REAL         NOT NULL,
-                ram         INTEGER,
-                storage     INTEGER,
-                cpu         TEXT,
-                gpu         TEXT,
-                last_maintenance_date TEXT,
-                ink_levels  INTEGER,
-                display_size REAL,
-                created_at  TEXT         DEFAULT CURRENT_TIMESTAMP,
-                updated_at  TEXT         DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (lab_id) REFERENCES labs(lab_id) ON DELETE SET NULL,
-                FOREIGN KEY (faculty_id) REFERENCES faculty(faculty_id) ON DELETE SET NULL
-            );
-        `);
-        await env.DB.exec(`
-            CREATE TABLE IF NOT EXISTS users (
-              user_id INTEGER PRIMARY KEY AUTOINCREMENT,
-              email TEXT NOT NULL UNIQUE,
-              password TEXT, -- Hashed password for email/password login
-              google_id TEXT UNIQUE, -- Google ID for Google Auth
-              created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-              updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-            );
-        `);
+        const statements = [
+            env.DB.prepare('PRAGMA foreign_keys = ON;'),
+            env.DB.prepare(`
+                CREATE TABLE IF NOT EXISTS labs (
+                  lab_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  lab_name TEXT NOT NULL UNIQUE,
+                  location TEXT,
+                  capacity INTEGER,
+                  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
+            `),
+            env.DB.prepare(`
+                CREATE TABLE IF NOT EXISTS faculty (
+                  faculty_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  faculty_name TEXT NOT NULL,
+                  email TEXT NOT NULL UNIQUE,
+                  department TEXT,
+                  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
+            `),
+            env.DB.prepare(`
+                CREATE TABLE IF NOT EXISTS devices (
+                    device_id   INTEGER      PRIMARY KEY AUTOINCREMENT,
+                    lab_id      INTEGER,
+                    faculty_id  INTEGER,
+                    device_name TEXT         NOT NULL,
+                    company     TEXT,
+                    lab_location TEXT,
+                    device_type TEXT         NOT NULL,
+                    status      TEXT         NOT NULL,
+                    ram         INTEGER,
+                    storage     INTEGER,
+                    cpu         TEXT,
+                    gpu         TEXT,
+                    last_maintenance_date TEXT,
+                    ink_levels  INTEGER,
+                    display_size REAL,
+                    invoice_number TEXT,
+                    invoice_pdf TEXT,
+                    created_at  TEXT         DEFAULT CURRENT_TIMESTAMP,
+                    updated_at  TEXT         DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (lab_id) REFERENCES labs(lab_id) ON DELETE SET NULL,
+                    FOREIGN KEY (faculty_id) REFERENCES faculty(faculty_id) ON DELETE SET NULL
+                );
+            `),
+            env.DB.prepare(`
+                CREATE TABLE IF NOT EXISTS users (
+                  user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  email TEXT NOT NULL UNIQUE,
+                  password TEXT,
+                  google_id TEXT UNIQUE,
+                  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
+            `)
+        ];
+        await env.DB.batch(statements);
 
 		return new Response('Database schema initialized successfully!', { status: 200 });
 	} catch (error) {
@@ -520,6 +522,11 @@ router.post('/api/faculty', async (request, env) => {
             return new Response('Failed to create faculty', { status: 500 });
         }
     } catch (error) {
+        console.error('Error in /api/faculty POST:', error); // Log the full error object
+        // Check for specific D1 error messages, e.g., unique constraint violations
+        if (error.message && error.message.includes('UNIQUE constraint failed: faculty.email')) {
+            return new Response('Faculty member with this email already exists.', { status: 409 });
+        }
         return new Response(`Error creating faculty: ${error.message}`, { status: 500 });
     }
 });
@@ -588,7 +595,16 @@ router.get('/api/devices', async (request, env) => {
         const url = new URL(request.url);
         const lab_id = url.searchParams.get('lab_id');
         const faculty_id = url.searchParams.get('faculty_id');
-		const devices = await db.getAllDevices({ lab_id, faculty_id });
+        const status = url.searchParams.get('status');
+        const device_type = url.searchParams.getAll('device_type'); // Use getAll for potentially multiple device_type params
+
+        // Pass filters to getAllDevices. If device_type is an empty array, pass null.
+		const devices = await db.getAllDevices({
+            lab_id,
+            faculty_id,
+            status,
+            device_type: device_type.length > 0 ? device_type : null
+        });
 		return new Response(JSON.stringify(devices), {
 			headers: { 'Content-Type': 'application/json' },
 		});
@@ -597,22 +613,67 @@ router.get('/api/devices', async (request, env) => {
 	}
 });
 
+// Helper function to generate a unique key for R2
+function arrayBufferToBase64(buffer) {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+}
+
 router.post('/api/devices', async (request, env) => {
-	const db = getDb(env.DB);
-	try {
-		const deviceData = await request.json();
-		const success = await db.createDevice(deviceData);
-		if (success) {
-			return new Response(JSON.stringify({ message: 'Device created successfully' }), {
-				status: 201,
-				headers: { 'Content-Type': 'application/json' },
-			});
-		} else {
-			return new Response('Failed to create device', { status: 500 });
-		}
-	} catch (error) {
-		return new Response(`Error creating device: ${error.message}`, { status: 500 });
-	}
+    const db = getDb(env.DB);
+    try {
+        const formData = await request.formData();
+        const deviceData = {};
+        let invoicePdf = null;
+
+        for (const [key, value] of formData.entries()) {
+            if (key === 'invoice_pdf') {
+                invoicePdf = value;
+            } else {
+                if (value === 'null' || value === 'undefined') {
+                    deviceData[key] = null;
+                } else {
+                    deviceData[key] = value;
+                }
+            }
+        }
+        
+        let invoicePdfBase64 = null;
+        if (invoicePdf && invoicePdf.name) {
+            // Server-side validation for PDF size
+            if (invoicePdf.size > 1024 * 1024) { // 1MB limit
+                return new Response('Invoice PDF size cannot exceed 1MB.', { status: 400 });
+            }
+
+            const arrayBuffer = await invoicePdf.arrayBuffer();
+            invoicePdfBase64 = arrayBufferToBase64(arrayBuffer);
+        }
+
+        deviceData.invoice_pdf = invoicePdfBase64;
+
+        // Ensure numeric fields are correctly typed
+        if (deviceData.ram) deviceData.ram = parseInt(deviceData.ram, 10);
+        if (deviceData.storage) deviceData.storage = parseInt(deviceData.storage, 10);
+        if (deviceData.lab_id) deviceData.lab_id = parseInt(deviceData.lab_id, 10);
+        if (deviceData.faculty_id) deviceData.faculty_id = parseInt(deviceData.faculty_id, 10);
+
+        const success = await db.createDevice(deviceData);
+        if (success) {
+            return new Response(JSON.stringify({ message: 'Device created successfully' }), {
+                status: 201,
+                headers: { 'Content-Type': 'application/json' },
+            });
+        } else {
+            return new Response('Failed to create device', { status: 500 });
+        }
+    } catch (error) {
+        return new Response(`Error creating device: ${error.message}`, { status: 500 });
+    }
 });
 
 router.get('/api/devices/:id', async (request, env) => {
@@ -667,6 +728,38 @@ router.delete('/api/devices/:id', async (request, env) => {
 	} catch (error) {
 		return new Response(`Error deleting device: ${error.message}`, { status: 500 });
 	}
+});
+
+function base64ToArrayBuffer(base64) {
+    const binary_string = atob(base64);
+    const len = binary_string.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binary_string.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+
+router.get('/api/devices/:id/invoice', async (request, env) => {
+    const db = getDb(env.DB);
+    try {
+        const { id } = request.params;
+        const device = await db.getDeviceById(id);
+
+        if (!device || !device.invoice_pdf) {
+            return new Response('Invoice not found for this device', { status: 404 });
+        }
+
+        const arrayBuffer = base64ToArrayBuffer(device.invoice_pdf);
+
+        return new Response(arrayBuffer, {
+            headers: {
+                'Content-Type': 'application/pdf',
+            },
+        });
+    } catch (error) {
+        return new Response(`Error fetching invoice: ${error.message}`, { status: 500 });
+    }
 });
 
 router.put('/api/devices/:id/reassign', async (request, env) => {
