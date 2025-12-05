@@ -31,19 +31,19 @@ CREATE TABLE devices (
     faculty_id  INTEGER,
     device_name TEXT         NOT NULL,
     company     TEXT,
-    labels      TEXT, -- comma-separated labels
     lab_location TEXT,
-    device_type TEXT         NOT NULL CHECK(device_type IN ('laptop', 'desktop', 'mouse', 'keyboard', 'monitor', 'printer', 'server')),
-    status      TEXT         NOT NULL, -- available, in-use, maintenance, etc.
-    ram         INTEGER, -- in GB
-    storage     INTEGER, -- in GB
+    device_type TEXT         NOT NULL,
+    status      TEXT         NOT NULL,
+    ram         INTEGER,
+    storage     INTEGER,
     cpu         TEXT,
-    gpu         TEXT,
+    ip_generation TEXT,
     last_maintenance_date TEXT,
-    ink_levels  INTEGER, -- for printers
-    display_size REAL, -- in inches
+    ink_levels  INTEGER,
+    display_size REAL,
     invoice_number TEXT,
     invoice_pdf TEXT,
+    remark      TEXT,
     created_at  TEXT         DEFAULT CURRENT_TIMESTAMP,
     updated_at  TEXT         DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (lab_id) REFERENCES labs(lab_id) ON DELETE SET NULL,

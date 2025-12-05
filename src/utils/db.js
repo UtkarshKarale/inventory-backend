@@ -66,7 +66,7 @@ export const getDb = (db) => {
 
         // Devices CRUD
         async getAllDevices({ lab_id = null, faculty_id = null, status = null, device_type = null } = {}) {
-            let query = "SELECT device_id, lab_id, faculty_id, device_name, company, lab_location, device_type, status, ram, storage, cpu, gpu, last_maintenance_date, ink_levels, display_size, invoice_number, updated_at, CASE WHEN invoice_pdf IS NOT NULL AND invoice_pdf != '' THEN 1 ELSE 0 END as has_invoice_pdf FROM devices";
+            let query = "SELECT device_id, lab_id, faculty_id, device_name, company, lab_location, device_type, status, ram, storage, cpu, ip_generation, last_maintenance_date, ink_levels, display_size, invoice_number, remark, updated_at, CASE WHEN invoice_pdf IS NOT NULL AND invoice_pdf != '' THEN 1 ELSE 0 END as has_invoice_pdf FROM devices";
             const conditions = [];
             const bindings = [];
             
@@ -120,23 +120,25 @@ export const getDb = (db) => {
                 ink_levels = null,
                 display_size = null,
                 invoice_number = null,
-                invoice_pdf = null
+                invoice_pdf = null,
+                remark = null,
+                ip_generation = null
             } = deviceData;
             const { success } = await db.prepare(
-                'INSERT INTO devices (lab_id, faculty_id, device_name, company, lab_location, device_type, status, ram, storage, cpu, gpu, last_maintenance_date, ink_levels, display_size, invoice_number, invoice_pdf) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                'INSERT INTO devices (lab_id, faculty_id, device_name, company, lab_location, device_type, status, ram, storage, cpu, ip_generation, last_maintenance_date, ink_levels, display_size, invoice_number, invoice_pdf, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             )
-            .bind(lab_id, faculty_id, device_name, company, lab_location, device_type, status, ram, storage, cpu, gpu, last_maintenance_date, ink_levels, display_size, invoice_number, invoice_pdf)
+            .bind(lab_id, faculty_id, device_name, company, lab_location, device_type, status, ram, storage, cpu, ip_generation, last_maintenance_date, ink_levels, display_size, invoice_number, invoice_pdf, remark)
             .run();
             return success;
         },
         async updateDevice(id, deviceData) {
             const {
-                lab_id, faculty_id, device_name, company, lab_location, device_type, status, ram, storage, cpu, gpu, last_maintenance_date, ink_levels, display_size
+                lab_id, faculty_id, device_name, company, lab_location, device_type, status, ram, storage, cpu, ip_generation, last_maintenance_date, ink_levels, display_size
             } = deviceData;
             const { success } = await db.prepare(
-                'UPDATE devices SET lab_id = ?, faculty_id = ?, device_name = ?, company = ?, lab_location = ?, device_type = ?, status = ?, ram = ?, storage = ?, cpu = ?, gpu = ?, last_maintenance_date = ?, ink_levels = ?, display_size = ?, updated_at = CURRENT_TIMESTAMP WHERE device_id = ?'
+                'UPDATE devices SET lab_id = ?, faculty_id = ?, device_name = ?, company = ?, lab_location = ?, device_type = ?, status = ?, ram = ?, storage = ?, cpu = ?, ip_generation = ?, last_maintenance_date = ?, ink_levels = ?, display_size = ?, updated_at = CURRENT_TIMESTAMP WHERE device_id = ?'
             )
-            .bind(lab_id, faculty_id, device_name, company, lab_location, device_type, status, ram, storage, cpu, gpu, last_maintenance_date, ink_levels, display_size, id)
+            .bind(lab_id, faculty_id, device_name, company, lab_location, device_type, status, ram, storage, cpu, ip_generation, last_maintenance_date, ink_levels, display_size, id)
             .run();
             return success;
         },
@@ -162,13 +164,57 @@ export const getDb = (db) => {
             .run();
             return success;
         },
-        async markDeviceAsDeadStock(device_id) {
+        async markDeviceAsDeadStock(device_id, remark) {
             const { success } = await db.prepare(
-                'UPDATE devices SET status = "dead_stock", updated_at = CURRENT_TIMESTAMP WHERE device_id = ?'
+                'UPDATE devices SET status = "dead_stock", remark = ?, updated_at = CURRENT_TIMESTAMP WHERE device_id = ?'
             )
-            .bind(device_id)
+            .bind(remark, device_id)
             .run();
             return success;
+        },
+
+        async markPartsAsDeadStock(originalDeviceId, parts, remark) {
+            const { results } = await db.prepare('SELECT * FROM devices WHERE device_id = ?').bind(originalDeviceId).all();
+            const originalDevice = results[0];
+
+            if (!originalDevice) {
+                throw new Error('Original device not found');
+            }
+
+            const statements = [];
+
+            for (const part of parts) {
+                const newDeviceName = `${part.charAt(0).toUpperCase() + part.slice(1)} from ${originalDevice.device_name}`;
+                
+                // Create a new device for the dead stock part
+                statements.push(
+                    db.prepare(
+                        'INSERT INTO devices (device_name, device_type, status, remark, company, invoice_number) VALUES (?, ?, ?, ?, ?, ?)'
+                    )
+                    .bind(
+                        newDeviceName,
+                        part, // 'mouse', 'keyboard', etc.
+                        'dead_stock',
+                        remark,
+                        originalDevice.company,
+                        originalDevice.invoice_number
+                    )
+                );
+            }
+            
+            // Update the original device's remark
+            const newRemark = `Parts moved to dead stock: ${parts.join(', ')}. ${remark}`;
+            const updatedRemark = originalDevice.remark ? `${originalDevice.remark}\n${newRemark}` : newRemark;
+
+            statements.push(
+                db.prepare('UPDATE devices SET remark = ? WHERE device_id = ?')
+                .bind(updatedRemark, originalDeviceId)
+            );
+
+            const results_batch = await db.batch(statements);
+            
+            // Check if all statements in the batch were successful
+            return results_batch.every(result => result.success);
         },
 
         // User Authentication
@@ -317,6 +363,8 @@ export const getDb = (db) => {
                 const totalPointers = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'pointer'").first();
                 const totalProjectors = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'projector'").first();
                 const totalCPUs = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'cpu'").first();
+                const totalMice = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'mouse'").first();
+                const totalKeyboards = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'keyboard'").first();
                 
                 // New, more specific status counts for computers
                 const totalComputersActive = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE device_type IN ('laptop', 'desktop', 'server', 'monitor') AND status = 'active'").first();
@@ -332,6 +380,8 @@ export const getDb = (db) => {
                     totalPointers: totalPointers.count,
                     totalProjectors: totalProjectors.count,
                     totalCPUs: totalCPUs.count,
+                    totalMice: totalMice.count,
+                    totalKeyboards: totalKeyboards.count,
                     // Pass the detailed computer status counts to the frontend
                     computersByStatus: {
                         active: totalComputersActive.count,

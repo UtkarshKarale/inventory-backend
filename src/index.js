@@ -147,12 +147,13 @@ router.get('/api/init-db', async (request, env) => {
                     ram         INTEGER,
                     storage     INTEGER,
                     cpu         TEXT,
-                    gpu         TEXT,
+                    ip_generation TEXT,
                     last_maintenance_date TEXT,
                     ink_levels  INTEGER,
                     display_size REAL,
                     invoice_number TEXT,
                     invoice_pdf TEXT,
+                    remark      TEXT,
                     created_at  TEXT         DEFAULT CURRENT_TIMESTAMP,
                     updated_at  TEXT         DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (lab_id) REFERENCES labs(lab_id) ON DELETE SET NULL,
@@ -512,6 +513,13 @@ router.post('/api/faculty', async (request, env) => {
         if (!faculty_name || !email) {
             return new Response('Faculty name and email are required', { status: 400 });
         }
+
+        // Backend email domain validation
+        const allowedDomainsRegex = /^[\w.-]+@(sgipolytechnic\.in|sgiinstitute\.in)$/;
+        if (!allowedDomainsRegex.test(email)) {
+            return new Response('Invalid email domain. Only @sgipolytechnic.in or @sgiinstitute.in are allowed.', { status: 400 });
+        }
+
         const success = await db.createFaculty(faculty_name, email, department, location);
         if (success) {
             return new Response(JSON.stringify({ message: 'Faculty created successfully' }), {
@@ -806,7 +814,11 @@ router.put('/api/devices/:id/deadstock', async (request, env) => {
     const db = getDb(env.DB);
     try {
         const { id } = request.params;
-        const success = await db.markDeviceAsDeadStock(id);
+        const { remark } = await request.json();
+        if (!remark) {
+            return new Response('Remark is required', { status: 400 });
+        }
+        const success = await db.markDeviceAsDeadStock(id, remark);
         if (success) {
             return new Response(JSON.stringify({ message: 'Device marked as dead stock successfully' }), {
                 status: 200,
@@ -817,6 +829,32 @@ router.put('/api/devices/:id/deadstock', async (request, env) => {
         }
     } catch (error) {
         return new Response(`Error marking device as dead stock: ${error.message}`, { status: 500 });
+    }
+});
+
+router.put('/api/devices/:id/deadstock-parts', async (request, env) => {
+    const db = getDb(env.DB);
+    try {
+        const { id } = request.params;
+        const { parts, remark } = await request.json();
+        if (!parts || !Array.isArray(parts) || parts.length === 0) {
+            return new Response('An array of parts is required.', { status: 400 });
+        }
+        if (!remark) {
+            return new Response('Remark is required.', { status: 400 });
+        }
+
+        const success = await db.markPartsAsDeadStock(id, parts, remark);
+        if (success) {
+            return new Response(JSON.stringify({ message: 'Selected parts marked as dead stock successfully' }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+            });
+        } else {
+            return new Response('Failed to mark parts as dead stock', { status: 500 });
+        }
+    } catch (error) {
+        return new Response(`Error marking parts as dead stock: ${error.message}`, { status: 500 });
     }
 });
 
