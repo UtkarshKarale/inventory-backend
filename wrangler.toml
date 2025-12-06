@@ -13,7 +13,7 @@ binding = "DB"
 database_name = "invo-manage"
 database_id = "23ae6e95-df17-4cc0-9bcb-3dbafe809ec4"
 
-[[r2_buckets]]
-binding = "INVOICE_BUCKET"
-bucket_name = "your-r2-bucket-name-here" # TODO: Replace with your R2 bucket name
+# [[r2_buckets]]
+# binding = "INVOICE_BUCKET"
+# bucket_name = "your-r2-bucket-name-here" # TODO: Replace with your R2 bucket name
 
