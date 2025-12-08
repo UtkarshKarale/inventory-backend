@@ -622,47 +622,48 @@ router.get('/api/devices', async (request, env) => {
 });
 
 // Helper function to generate a unique key for R2
-// function arrayBufferToBase64(buffer) {
-//     let binary = '';
-//     const bytes = new Uint8Array(buffer);
-//     const len = bytes.byteLength;
-//     for (let i = 0; i < len; i++) {
-//         binary += String.fromCharCode(bytes[i]);
-//     }
-//     return btoa(binary);
-// }
+function arrayBufferToBase64(buffer) {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+}
 
 router.post('/api/devices', async (request, env) => {
     const db = getDb(env.DB);
     try {
         const formData = await request.formData();
         const deviceData = {};
-        // let invoicePdf = null;
+        let invoicePdf = null;
 
         for (const [key, value] of formData.entries()) {
-            // if (key === 'invoice_pdf') {
-            //     invoicePdf = value;
-            // } else {
+            if (key === 'invoice_pdf') {
+                invoicePdf = value;
+            } else {
                 if (value === 'null' || value === 'undefined') {
                     deviceData[key] = null;
                 } else {
                     deviceData[key] = value;
                 }
-            // }
+            }
         }
         
-        // let invoicePdfBase64 = null;
-        // if (invoicePdf && invoicePdf.name) {
-        //     // Server-side validation for PDF size
-        //     if (invoicePdf.size > 1024 * 1024) { // 1MB limit
-        //         return new Response('Invoice PDF size cannot exceed 1MB.', { status: 400 });
-        //     }
+        let invoicePdfBase64 = null;
+        if (invoicePdf && invoicePdf.name) {
+            // Server-side validation for PDF size
+            if (invoicePdf.size > 1024 * 1024) { // 1MB limit
+                return new Response('Invoice PDF size cannot exceed 1MB.', { status: 400 });
+            }
 
-        //     const arrayBuffer = await invoicePdf.arrayBuffer();
-        //     invoicePdfBase64 = arrayBufferToBase64(arrayBuffer);
-        // }
+            const arrayBuffer = await invoicePdf.arrayBuffer();
+            invoicePdfBase64 = arrayBufferToBase64(arrayBuffer);
+        }
 
-        // deviceData.invoice_pdf = invoicePdfBase64;
+        deviceData.invoice_pdf = invoicePdfBase64;
+
 
         // Ensure numeric fields are correctly typed
         if (deviceData.ram) deviceData.ram = parseInt(deviceData.ram, 10);
@@ -738,37 +739,37 @@ router.delete('/api/devices/:id', async (request, env) => {
 	}
 });
 
-// function base64ToArrayBuffer(base64) {
-//     const binary_string = atob(base64);
-//     const len = binary_string.length;
-//     const bytes = new Uint8Array(len);
-//     for (let i = 0; i < len; i++) {
-//         bytes[i] = binary_string.charCodeAt(i);
-//     }
-//     return bytes.buffer;
-// }
+function base64ToArrayBuffer(base64) {
+    const binary_string = atob(base64);
+    const len = binary_string.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binary_string.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
 
-// router.get('/api/devices/:id/invoice', async (request, env) => {
-//     const db = getDb(env.DB);
-//     try {
-//         const { id } = request.params;
-//         const device = await db.getDeviceById(id);
+router.get('/api/devices/:id/invoice', async (request, env) => {
+    const db = getDb(env.DB);
+    try {
+        const { id } = request.params;
+        const device = await db.getDeviceById(id);
 
-//         if (!device || !device.invoice_pdf) {
-//             return new Response('Invoice not found for this device', { status: 404 });
-//         }
+        if (!device || !device.invoice_pdf) {
+            return new Response('Invoice not found for this device', { status: 404 });
+        }
 
-//         const arrayBuffer = base64ToArrayBuffer(device.invoice_pdf);
+        const arrayBuffer = base64ToArrayBuffer(device.invoice_pdf);
 
-//         return new Response(arrayBuffer, {
-//             headers: {
-//                 'Content-Type': 'application/pdf',
-//             },
-//         });
-//     } catch (error) {
-//         return new Response(`Error fetching invoice: ${error.message}`, { status: 500 });
-//     }
-// });
+        return new Response(arrayBuffer, {
+            headers: {
+                'Content-Type': 'application/pdf',
+            },
+        });
+    } catch (error) {
+        return new Response(`Error fetching invoice: ${error.message}`, { status: 500 });
+    }
+});
 
 router.put('/api/devices/:id/reassign', async (request, env) => {
     const db = getDb(env.DB);
