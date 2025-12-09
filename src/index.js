@@ -130,6 +130,7 @@ router.get('/api/init-db', async (request, env) => {
                   faculty_name TEXT NOT NULL,
                   email TEXT NOT NULL UNIQUE,
                   department TEXT,
+                  location TEXT,
                   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
                 );

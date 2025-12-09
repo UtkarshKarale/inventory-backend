@@ -370,6 +370,13 @@ export const getDb = (db) => {
                 const totalComputersActive = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE device_type IN ('laptop', 'desktop', 'server', 'monitor') AND status = 'active'").first();
                 const totalComputersDeadStock = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE device_type IN ('laptop', 'desktop', 'server', 'monitor') AND status = 'dead_stock'").first();
 
+                const computersByLab = await db.prepare(`
+                    SELECT l.lab_id, l.lab_name as lab, COUNT(d.device_id) as count 
+                    FROM labs l 
+                    LEFT JOIN devices d ON l.lab_id = d.lab_id 
+                    GROUP BY l.lab_id, l.lab_name
+                `).all();
+
                 return {
                     totalLabs: totalLabs.count,
                     totalFaculty: totalFaculty.count,
@@ -386,7 +393,8 @@ export const getDb = (db) => {
                     computersByStatus: {
                         active: totalComputersActive.count,
                         dead_stock: totalComputersDeadStock.count,
-                    }
+                    },
+                    computersByLab: computersByLab.results,
                 };
             } catch (error) {
                 console.error('Error in getDashboardStats:', error);
