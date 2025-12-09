@@ -665,11 +665,28 @@ router.post('/api/devices', async (request, env) => {
         deviceData.invoice_pdf = invoicePdfBase64;
 
 
-        // Ensure numeric fields are correctly typed
-        if (deviceData.ram) deviceData.ram = parseInt(deviceData.ram, 10);
-        if (deviceData.storage) deviceData.storage = parseInt(deviceData.storage, 10);
-        if (deviceData.lab_id) deviceData.lab_id = parseInt(deviceData.lab_id, 10);
-        if (deviceData.faculty_id) deviceData.faculty_id = parseInt(deviceData.faculty_id, 10);
+        // Ensure numeric fields are correctly typed and handle empty strings or invalid numbers.
+        const fieldsToParseAsInt = ['ram', 'storage', 'lab_id', 'faculty_id', 'ink_levels'];
+        fieldsToParseAsInt.forEach(field => {
+            const value = deviceData[field];
+            if (value === '' || value === null || value === undefined) {
+                deviceData[field] = null;
+            } else {
+                const parsed = parseInt(value, 10);
+                deviceData[field] = isNaN(parsed) ? null : parsed;
+            }
+        });
+
+        const fieldsToParseAsFloat = ['display_size'];
+        fieldsToParseAsFloat.forEach(field => {
+            const value = deviceData[field];
+            if (value === '' || value === null || value === undefined) {
+                deviceData[field] = null;
+            } else {
+                const parsed = parseFloat(value);
+                deviceData[field] = isNaN(parsed) ? null : parsed;
+            }
+        });
 
         const success = await db.createDevice(deviceData);
         if (success) {
