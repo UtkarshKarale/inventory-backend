@@ -530,7 +530,7 @@ router.post('/api/faculty', async (request, env) => {
             return new Response('Failed to create faculty', { status: 500 });
         }
     } catch (error) {
-        console.error('Error in /api/faculty POST:', error); // Log the full error object
+        console.error('Detailed error in /api/faculty POST:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
         // Check for specific D1 error messages, e.g., unique constraint violations
         if (error.message && error.message.includes('UNIQUE constraint failed: faculty.email')) {
             return new Response('Faculty member with this email already exists.', { status: 409 });
