@@ -51,15 +51,25 @@ CREATE TABLE IF NOT EXISTS users (
 );
 `;
 
+const allowedOrigins = [
+    'https://cseinventory.cse-tech.workers.dev',
+    'http://localhost:3000', // For local development
+    'http://localhost:3001', // Added for local development
+    'http://localhost:56402', // Added for local development
+];
+
 const router = new Router();
 
 // CORS handling (placed first to act as middleware)
 router.all('*', (request) => {
+    const origin = request.headers.get('Origin');
+    const allowedOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+
     // Handle preflight OPTIONS requests
     if (request.method === 'OPTIONS') {
         return new Response(null, {
             headers: {
-                'Access-Control-Allow-Origin': '*', // Allow any origin
+                'Access-Control-Allow-Origin': allowedOrigin,
                 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
                 'Access-Control-Allow-Headers': 'Content-Type, Authorization',
                 'Access-Control-Max-Age': '86400', // Cache preflight for 24 hours
@@ -97,8 +107,11 @@ async function authenticate(request, env) {
 }
 
 // Add CORS headers to all responses (applied at the end of fetch)
-const addCorsHeaders = (response) => {
-    response.headers.set('Access-Control-Allow-Origin', '*');
+const addCorsHeaders = (response, request) => {
+    const origin = request.headers.get('Origin');
+    const allowedOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+
+    response.headers.set('Access-Control-Allow-Origin', allowedOrigin);
     response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     response.headers.set('Access-Control-Allow-Credentials', 'true'); // Important for sending cookies/auth headers
@@ -811,6 +824,28 @@ router.put('/api/devices/:id/reassign', async (request, env) => {
     }
 });
 
+router.put('/api/devices/:id/reassign-lab', async (request, env) => {
+    const db = getDb(env.DB);
+    try {
+        const { id } = request.params;
+        const { lab_id } = await request.json();
+        if (!lab_id) {
+            return new Response('Lab ID is required for reassignment', { status: 400 });
+        }
+        const success = await db.reassignDeviceToLab(id, lab_id);
+        if (success) {
+            return new Response(JSON.stringify({ message: 'Device reassigned to lab successfully' }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+            });
+        } else {
+            return new Response('Failed to reassign device to lab', { status: 500 });
+        }
+    } catch (error) {
+        return new Response(`Error reassigning device to lab: ${error.message}`, { status: 500 });
+    }
+});
+
 router.put('/api/devices/:id/deselect', async (request, env) => {
     const db = getDb(env.DB);
     try {
@@ -886,7 +921,7 @@ export default {
 		const response = await router.handle(request, env, ctx);
         console.log('Response from router.handle:', response);
         if (response instanceof Response) {
-            return addCorsHeaders(response);
+            return addCorsHeaders(response, request);
         }
         // If router.handle somehow returns something that is not a Response object,
         // return a 500 Internal Server Error.

@@ -43,7 +43,6 @@ export const getDb = (db) => {
         },
         async createFaculty(faculty_name, email, department, location) {
             const normalizedEmail = email.trim().toLowerCase();
-            console.log('Attempting to create faculty with normalized email:', normalizedEmail);
             const { success } = await db.prepare(
                 'INSERT INTO faculty (faculty_name, email, department, location) VALUES (?, ?, ?, ?)'
             )
@@ -132,9 +131,16 @@ export const getDb = (db) => {
             return success;
         },
         async updateDevice(id, deviceData) {
-            const {
+            let {
                 lab_id, faculty_id, device_name, company, lab_location, device_type, status, ram, storage, cpu, ip_generation, last_maintenance_date, ink_levels, display_size
             } = deviceData;
+
+            if (faculty_id) {
+                lab_id = null;
+            } else if (lab_id) {
+                faculty_id = null;
+            }
+
             const { success } = await db.prepare(
                 'UPDATE devices SET lab_id = ?, faculty_id = ?, device_name = ?, company = ?, lab_location = ?, device_type = ?, status = ?, ram = ?, storage = ?, cpu = ?, ip_generation = ?, last_maintenance_date = ?, ink_levels = ?, display_size = ?, updated_at = CURRENT_TIMESTAMP WHERE device_id = ?'
             )
@@ -150,9 +156,17 @@ export const getDb = (db) => {
         // Device Management
         async reassignDevice(device_id, new_faculty_id) {
             const { success } = await db.prepare(
-                'UPDATE devices SET faculty_id = ?, updated_at = CURRENT_TIMESTAMP WHERE device_id = ?'
+                'UPDATE devices SET faculty_id = ?, lab_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE device_id = ?'
             )
             .bind(new_faculty_id, device_id)
+            .run();
+            return success;
+        },
+        async reassignDeviceToLab(device_id, new_lab_id) {
+            const { success } = await db.prepare(
+                'UPDATE devices SET lab_id = ?, faculty_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE device_id = ?'
+            )
+            .bind(new_lab_id, device_id)
             .run();
             return success;
         },
@@ -291,11 +305,11 @@ export const getDb = (db) => {
         
         async getFacultyInventoryReportData() {
             const faculty = await this.getAllFaculty();
-            const allDevices = await this.getAllDevices();
+            const activeDevices = await this.getAllDevices({ status: 'active' }); // Fetch only active devices
 
             // Group devices by faculty
             const facultyWithDevices = faculty.map(fac => {
-                const devicesAssignedToFaculty = allDevices.filter(device => device.faculty_id === fac.faculty_id);
+                const devicesAssignedToFaculty = activeDevices.filter(device => device.faculty_id === fac.faculty_id);
                 return {
                     ...fac,
                     devices: devicesAssignedToFaculty,
@@ -354,31 +368,46 @@ export const getDb = (db) => {
         // Dashboard Statistics
         async getDashboardStats() {
             try {
-                const totalLabs = await db.prepare('SELECT COUNT(*) as count FROM labs').first();
-                const totalFaculty = await db.prepare('SELECT COUNT(*) as count FROM faculty').first();
-                const totalDevices = await db.prepare('SELECT COUNT(*) as count FROM devices').first();
-                const totalComputers = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) IN ('laptop', 'desktop', 'server', 'monitor')").first();
-                const totalPrinters = await db.prepare('SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = "printer"').first();
-                const totalDigitalBoards = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'digital_board'").first();
-                const totalPointers = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'pointer'").first();
-                const totalProjectors = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'projector'").first();
-                const totalCPUs = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'cpu'").first();
-                const totalMice = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'mouse'").first();
-                const totalKeyboards = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'keyboard'").first();
-                
-                // New, more specific status counts for computers
-                const totalComputersActive = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE device_type IN ('laptop', 'desktop', 'server', 'monitor') AND status = 'active'").first();
-                const totalComputersDeadStock = await db.prepare("SELECT COUNT(*) as count FROM devices WHERE device_type IN ('laptop', 'desktop', 'server', 'monitor') AND status = 'dead_stock'").first();
-
-                const computersByLab = await db.prepare(`
-                    SELECT l.lab_id, l.lab_name as lab, COUNT(d.device_id) as count 
-                    FROM labs l 
-                    LEFT JOIN devices d ON l.lab_id = d.lab_id 
-                    GROUP BY l.lab_id, l.lab_name
-                `).all();
+                const [
+                    totalFaculty,
+                    totalDevices,
+                    totalComputers,
+                    totalPrinters,
+                    totalDigitalBoards,
+                    totalPointers,
+                    totalProjectors,
+                    totalCPUs,
+                    totalMice,
+                    totalKeyboards,
+                    totalComputersActive,
+                    totalComputersDeadStock,
+                    devicesByLab,
+                ] = await Promise.all([
+                    db.prepare('SELECT COUNT(*) as count FROM faculty').first(),
+                    db.prepare("SELECT COUNT(*) as count FROM devices WHERE status = 'active'").first(),
+                    db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) IN ('laptop', 'desktop', 'server', 'monitor') AND status = 'active'").first(),
+                    db.prepare('SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = "printer" AND status = \'active\'').first(),
+                    db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'digital_board' AND status = 'active'").first(),
+                    db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'pointer' AND status = 'active'").first(),
+                    db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'projector' AND status = 'active'").first(),
+                    db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'cpu' AND status = 'active'").first(),
+                    db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'mouse' AND status = 'active'").first(),
+                    db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'keyboard' AND status = 'active'").first(),
+                    db.prepare("SELECT COUNT(*) as count FROM devices WHERE device_type IN ('laptop', 'desktop', 'server', 'monitor') AND status = 'active'").first(),
+                    db.prepare("SELECT COUNT(*) as count FROM devices WHERE status = 'dead_stock'").first(),
+                    db.prepare(`
+                        SELECT
+                            l.lab_id,
+                            l.lab_name as lab,
+                            COUNT(d.device_id) as count
+                        FROM labs l
+                        LEFT JOIN devices d ON l.lab_id = d.lab_id AND d.status = 'active'
+                        GROUP BY l.lab_id, l.lab_name
+                        ORDER BY l.lab_name
+                    `).all(),
+                ]);
 
                 return {
-                    totalLabs: totalLabs.count,
                     totalFaculty: totalFaculty.count,
                     totalDevices: totalDevices.count,
                     totalComputers: totalComputers.count,
@@ -389,15 +418,13 @@ export const getDb = (db) => {
                     totalCPUs: totalCPUs.count,
                     totalMice: totalMice.count,
                     totalKeyboards: totalKeyboards.count,
-                    // Pass the detailed computer status counts to the frontend
                     computersByStatus: {
                         active: totalComputersActive.count,
                         dead_stock: totalComputersDeadStock.count,
                     },
-                    computersByLab: computersByLab.results,
+                    devicesByLab: devicesByLab.results,
                 };
             } catch (error) {
-                console.error('Error in getDashboardStats:', error);
                 throw error;
             }
         },

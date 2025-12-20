@@ -11,7 +11,7 @@ GOOGLE_CLIENT_SECRET = "your_google_client_secret"
 [[d1_databases]]
 binding = "DB"
 database_name = "invo-manage"
-database_id = "23ae6e95-df17-4cc0-9bcb-3dbafe809ec4"
+database_id = "997cd640-2494-4cae-aaf6-9b175569e7c1"
 
 # [[r2_buckets]]
 # binding = "INVOICE_BUCKET"
