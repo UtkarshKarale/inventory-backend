@@ -56,6 +56,7 @@ const allowedOrigins = [
     'http://localhost:3000', // For local development
     'http://localhost:3001', // Added for local development
     'http://localhost:56402', // Added for local development
+    'http://sgideadstock.sginstitute.in',
 ];
 
 const router = new Router();
@@ -120,11 +121,11 @@ const addCorsHeaders = (response, request) => {
 
 
 router.get('/', () => {
-	return new Response('Hello World from Inventory Backend!');
+    return new Response('Hello World from Inventory Backend!');
 });
 
 router.get('/api/init-db', async (request, env) => {
-	try {
+    try {
         const statements = [
             env.DB.prepare('PRAGMA foreign_keys = ON;'),
             env.DB.prepare(`
@@ -187,10 +188,10 @@ router.get('/api/init-db', async (request, env) => {
         ];
         await env.DB.batch(statements);
 
-		return new Response('Database schema initialized successfully!', { status: 200 });
-	} catch (error) {
-		return new Response(`Error initializing database: ${error.message}`, { status: 500 });
-	}
+        return new Response('Database schema initialized successfully!', { status: 200 });
+    } catch (error) {
+        return new Response(`Error initializing database: ${error.message}`, { status: 500 });
+    }
 });
 
 // Authentication Routes
@@ -249,7 +250,7 @@ router.post('/api/auth/login', async (request, env) => {
     } catch (error) {
         return new Response(`Error logging in: ${error.message}`, { status: 500 });
     }
-    
+
 });
 
 // Google OAuth
@@ -295,7 +296,7 @@ router.get('/api/auth/google/callback', async (request, env) => {
         const userInfo = await userInfoResponse.json();
 
         if (userInfo.error) {
-             return new Response(`Google User Info error: ${userInfo.error_description || userInfo.error}`, { status: 400 });
+            return new Response(`Google User Info error: ${userInfo.error_description || userInfo.error}`, { status: 400 });
         }
 
         let user = await db.findUserByGoogleId(userInfo.sub);
@@ -309,8 +310,8 @@ router.get('/api/auth/google/callback', async (request, env) => {
                 const { success, meta } = await env.DB.prepare(
                     'INSERT INTO users (email, google_id) VALUES (?, ?)'
                 )
-                .bind(userInfo.email, userInfo.sub)
-                .run();
+                    .bind(userInfo.email, userInfo.sub)
+                    .run();
                 if (success) {
                     user = await db.findUserById(meta.last_row_id);
                 } else {
@@ -403,8 +404,8 @@ router.get('/api/reports/complete-inventory', async (request, env) => {
     }
 });
 
-// Helper to get HOD Cabin Lab ID
-router.get('/api/hod-cabin-lab-id', async (request, env) => {
+// Helper to get Central Store Lab ID
+router.get('/api/central-store-lab-id', async (request, env) => {
     const db = getDb(env.DB);
     try {
         const hodCabinLabId = await db.getOrCreateHodCabinLabId();
@@ -412,7 +413,7 @@ router.get('/api/hod-cabin-lab-id', async (request, env) => {
             headers: { 'Content-Type': 'application/json' },
         });
     } catch (error) {
-        return new Response(`Error fetching/creating HOD Cabin lab ID: ${error.message}`, { status: 500 });
+        return new Response(`Error fetching/creating Central Store lab ID: ${error.message}`, { status: 500 });
     }
 });
 
@@ -612,8 +613,8 @@ router.delete('/api/faculty/:id', async (request, env) => {
 
 // Devices CRUD operations (protected)
 router.get('/api/devices', async (request, env) => {
-	const db = getDb(env.DB);
-	try {
+    const db = getDb(env.DB);
+    try {
         const url = new URL(request.url);
         const lab_id = url.searchParams.get('lab_id');
         const faculty_id = url.searchParams.get('faculty_id');
@@ -621,18 +622,18 @@ router.get('/api/devices', async (request, env) => {
         const device_type = url.searchParams.getAll('device_type'); // Use getAll for potentially multiple device_type params
 
         // Pass filters to getAllDevices. If device_type is an empty array, pass null.
-		const devices = await db.getAllDevices({
+        const devices = await db.getAllDevices({
             lab_id,
             faculty_id,
             status,
             device_type: device_type.length > 0 ? device_type : null
         });
-		return new Response(JSON.stringify(devices), {
-			headers: { 'Content-Type': 'application/json' },
-		});
-	} catch (error) {
-		return new Response(`Error fetching devices: ${error.message}`, { status: 500 });
-	}
+        return new Response(JSON.stringify(devices), {
+            headers: { 'Content-Type': 'application/json' },
+        });
+    } catch (error) {
+        return new Response(`Error fetching devices: ${error.message}`, { status: 500 });
+    }
 });
 
 // Helper function to generate a unique key for R2
@@ -664,7 +665,7 @@ router.post('/api/devices', async (request, env) => {
                 }
             }
         }
-        
+
         let invoicePdfBase64 = null;
         if (invoicePdf && invoicePdf.name) {
             // Server-side validation for PDF size
@@ -717,57 +718,57 @@ router.post('/api/devices', async (request, env) => {
 });
 
 router.get('/api/devices/:id', async (request, env) => {
-	const db = getDb(env.DB);
-	try {
-		const { id } = request.params;
-		const device = await db.getDeviceById(id);
-		if (device) {
-			return new Response(JSON.stringify(device), {
-				headers: { 'Content-Type': 'application/json' },
-			});
-		} else {
-			return new Response('Device not found', { status: 404 });
-		}
-	} catch (error) {
-		return new Response(`Error fetching device: ${error.message}`, { status: 500 });
-	}
+    const db = getDb(env.DB);
+    try {
+        const { id } = request.params;
+        const device = await db.getDeviceById(id);
+        if (device) {
+            return new Response(JSON.stringify(device), {
+                headers: { 'Content-Type': 'application/json' },
+            });
+        } else {
+            return new Response('Device not found', { status: 404 });
+        }
+    } catch (error) {
+        return new Response(`Error fetching device: ${error.message}`, { status: 500 });
+    }
 });
 
 router.put('/api/devices/:id', async (request, env) => {
-	const db = getDb(env.DB);
-	try {
-		const { id } = request.params;
-		const deviceData = await request.json();
-		const success = await db.updateDevice(id, deviceData);
-		if (success) {
-			return new Response(JSON.stringify({ message: 'Device updated successfully' }), {
-				status: 200,
-				headers: { 'Content-Type': 'application/json' },
-			});
-		} else {
-			return new Response('Failed to update device', { status: 500 });
-		}
-	} catch (error) {
-		return new Response(`Error updating device: ${error.message}`, { status: 500 });
-	}
+    const db = getDb(env.DB);
+    try {
+        const { id } = request.params;
+        const deviceData = await request.json();
+        const success = await db.updateDevice(id, deviceData);
+        if (success) {
+            return new Response(JSON.stringify({ message: 'Device updated successfully' }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+            });
+        } else {
+            return new Response('Failed to update device', { status: 500 });
+        }
+    } catch (error) {
+        return new Response(`Error updating device: ${error.message}`, { status: 500 });
+    }
 });
 
 router.delete('/api/devices/:id', async (request, env) => {
-	const db = getDb(env.DB);
-	try {
-		const { id } = request.params;
-		const success = await db.deleteDevice(id);
-		if (success) {
-			return new Response(JSON.stringify({ message: 'Device deleted successfully' }), {
-				status: 200,
-				headers: { 'Content-Type': 'application/json' },
-			});
-		} else {
-			return new Response('Failed to delete device', { status: 500 });
-		}
-	} catch (error) {
-		return new Response(`Error deleting device: ${error.message}`, { status: 500 });
-	}
+    const db = getDb(env.DB);
+    try {
+        const { id } = request.params;
+        const success = await db.deleteDevice(id);
+        if (success) {
+            return new Response(JSON.stringify({ message: 'Device deleted successfully' }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+            });
+        } else {
+            return new Response('Failed to delete device', { status: 500 });
+        }
+    } catch (error) {
+        return new Response(`Error deleting device: ${error.message}`, { status: 500 });
+    }
 });
 
 function base64ToArrayBuffer(base64) {
@@ -915,10 +916,22 @@ router.put('/api/devices/:id/deadstock-parts', async (request, env) => {
 // Final 404 handler (placed last)
 router.all('*', () => new Response('Not Found.', { status: 404 }));
 
+router.get('/api/maintenance/capitalize-names', async (request, env) => {
+    const db = getDb(env.DB);
+    try {
+        const result = await db.capitalizeExistingNames();
+        return new Response(JSON.stringify(result), {
+            headers: { 'Content-Type': 'application/json' },
+        });
+    } catch (error) {
+        return new Response(`Error during name capitalization: ${error.message}`, { status: 500 });
+    }
+});
+
 export default {
-	async fetch(request, env, ctx) {
+    async fetch(request, env, ctx) {
         console.log('--- fetch handler start ---');
-		const response = await router.handle(request, env, ctx);
+        const response = await router.handle(request, env, ctx);
         console.log('Response from router.handle:', response);
         if (response instanceof Response) {
             return addCorsHeaders(response, request);
@@ -926,5 +939,5 @@ export default {
         // If router.handle somehow returns something that is not a Response object,
         // return a 500 Internal Server Error.
         return new Response('Internal Server Error: Router did not return a valid Response.', { status: 500 });
-	},
+    },
 };

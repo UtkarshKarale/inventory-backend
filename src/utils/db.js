@@ -12,19 +12,29 @@ export const getDb = (db) => {
             return results[0];
         },
         async createLab(lab_name, location, capacity) {
+            const formatString = (str) => {
+                if (!str || str === 'N/A') return str;
+                return str.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+            };
+            const capitalizedName = formatString(lab_name);
             const { success } = await db.prepare(
                 'INSERT INTO labs (lab_name, location, capacity) VALUES (?, ?, ?)'
             )
-            .bind(lab_name, location, capacity)
-            .run();
+                .bind(capitalizedName, location, capacity)
+                .run();
             return success;
         },
         async updateLab(id, lab_name, location, capacity) {
+            const formatString = (str) => {
+                if (!str || str === 'N/A') return str;
+                return str.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+            };
+            const capitalizedName = formatString(lab_name);
             const { success } = await db.prepare(
                 'UPDATE labs SET lab_name = ?, location = ?, capacity = ?, updated_at = CURRENT_TIMESTAMP WHERE lab_id = ?'
             )
-            .bind(lab_name, location, capacity, id)
-            .run();
+                .bind(capitalizedName, location, capacity, id)
+                .run();
             return success;
         },
         async deleteLab(id) {
@@ -42,20 +52,32 @@ export const getDb = (db) => {
             return results[0];
         },
         async createFaculty(faculty_name, email, department, location) {
+            const formatString = (str) => {
+                if (!str || str === 'N/A') return str;
+                return str.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+            };
+            const capitalizedName = formatString(faculty_name);
+            const capitalizedDept = formatString(department);
             const normalizedEmail = email.trim().toLowerCase();
             const { success } = await db.prepare(
                 'INSERT INTO faculty (faculty_name, email, department, location) VALUES (?, ?, ?, ?)'
             )
-            .bind(faculty_name, normalizedEmail, department, location)
-            .run();
+                .bind(capitalizedName, normalizedEmail, capitalizedDept, location)
+                .run();
             return success;
         },
         async updateFaculty(id, faculty_name, email, department, location) {
+            const formatString = (str) => {
+                if (!str || str === 'N/A') return str;
+                return str.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+            };
+            const capitalizedName = formatString(faculty_name);
+            const capitalizedDept = formatString(department);
             const { success } = await db.prepare(
                 'UPDATE faculty SET faculty_name = ?, email = ?, department = ?, location = ?, updated_at = CURRENT_TIMESTAMP WHERE faculty_id = ?'
             )
-            .bind(faculty_name, email, department, location, id)
-            .run();
+                .bind(capitalizedName, email, capitalizedDept, location, id)
+                .run();
             return success;
         },
         async deleteFaculty(id) {
@@ -65,28 +87,51 @@ export const getDb = (db) => {
 
         // Devices CRUD
         async getAllDevices({ lab_id = null, faculty_id = null, status = null, device_type = null } = {}) {
-            let query = "SELECT device_id, lab_id, faculty_id, device_name, company, lab_location, device_type, status, ram, storage, cpu, ip_generation, last_maintenance_date, ink_levels, display_size, invoice_number, remark, updated_at, CASE WHEN invoice_pdf IS NOT NULL AND invoice_pdf != '' THEN 1 ELSE 0 END as has_invoice_pdf FROM devices";
+            let query = `
+                SELECT 
+                    d.device_id, 
+                    d.lab_id, 
+                    d.faculty_id, 
+                    d.device_name, 
+                    d.company, 
+                    COALESCE(d.lab_location, l.lab_name) as lab_location,
+                    d.device_type, 
+                    d.status, 
+                    d.ram, 
+                    d.storage, 
+                    d.cpu, 
+                    d.ip_generation, 
+                    d.last_maintenance_date, 
+                    d.ink_levels, 
+                    d.display_size, 
+                    d.invoice_number, 
+                    d.remark, 
+                    d.updated_at, 
+                    CASE WHEN d.invoice_pdf IS NOT NULL AND d.invoice_pdf != '' THEN 1 ELSE 0 END as has_invoice_pdf 
+                FROM devices d
+                LEFT JOIN labs l ON d.lab_id = l.lab_id
+            `;
             const conditions = [];
             const bindings = [];
-            
+
             if (lab_id !== null) {
-                conditions.push('lab_id = ?');
+                conditions.push('d.lab_id = ?');
                 bindings.push(lab_id);
             }
             if (faculty_id !== null) {
-                conditions.push('faculty_id = ?');
+                conditions.push('d.faculty_id = ?');
                 bindings.push(faculty_id);
             }
             if (status !== null) {
-                conditions.push('status = ?');
+                conditions.push('d.status = ?');
                 bindings.push(status);
             }
             if (device_type !== null) {
                 if (Array.isArray(device_type)) {
-                    conditions.push(`TRIM(device_type) IN (${device_type.map(() => '?').join(', ')})`);
+                    conditions.push(`TRIM(d.device_type) IN (${device_type.map(() => '?').join(', ')})`);
                     bindings.push(...device_type);
                 } else {
-                    conditions.push('TRIM(device_type) = ?');
+                    conditions.push('TRIM(d.device_type) = ?');
                     bindings.push(device_type);
                 }
             }
@@ -103,6 +148,10 @@ export const getDb = (db) => {
             return results[0];
         },
         async createDevice(deviceData) {
+            const formatString = (str) => {
+                if (!str || str === 'N/A') return str;
+                return str.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+            };
             const {
                 lab_id = null,
                 faculty_id = null,
@@ -123,14 +172,23 @@ export const getDb = (db) => {
                 remark = null,
                 ip_generation = null
             } = deviceData;
+
+            const capitalizedName = formatString(device_name);
+            const capitalizedCompany = formatString(company);
+            const capitalizedLabLoc = formatString(lab_location);
+
             const { success } = await db.prepare(
                 'INSERT INTO devices (lab_id, faculty_id, device_name, company, lab_location, device_type, status, ram, storage, cpu, ip_generation, last_maintenance_date, ink_levels, display_size, invoice_number, invoice_pdf, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             )
-            .bind(lab_id, faculty_id, device_name, company, lab_location, device_type, status, ram, storage, cpu, ip_generation, last_maintenance_date, ink_levels, display_size, invoice_number, invoice_pdf, remark)
-            .run();
+                .bind(lab_id, faculty_id, capitalizedName, capitalizedCompany, capitalizedLabLoc, device_type, status, ram, storage, cpu, ip_generation, last_maintenance_date, ink_levels, display_size, invoice_number, invoice_pdf, remark)
+                .run();
             return success;
         },
         async updateDevice(id, deviceData) {
+            const formatString = (str) => {
+                if (!str || str === 'N/A') return str;
+                return str.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+            };
             let {
                 lab_id, faculty_id, device_name, company, lab_location, device_type, status, ram, storage, cpu, ip_generation, last_maintenance_date, ink_levels, display_size
             } = deviceData;
@@ -141,11 +199,15 @@ export const getDb = (db) => {
                 faculty_id = null;
             }
 
+            const capitalizedName = formatString(device_name);
+            const capitalizedCompany = formatString(company);
+            const capitalizedLabLoc = formatString(lab_location);
+
             const { success } = await db.prepare(
                 'UPDATE devices SET lab_id = ?, faculty_id = ?, device_name = ?, company = ?, lab_location = ?, device_type = ?, status = ?, ram = ?, storage = ?, cpu = ?, ip_generation = ?, last_maintenance_date = ?, ink_levels = ?, display_size = ?, updated_at = CURRENT_TIMESTAMP WHERE device_id = ?'
             )
-            .bind(lab_id, faculty_id, device_name, company, lab_location, device_type, status, ram, storage, cpu, ip_generation, last_maintenance_date, ink_levels, display_size, id)
-            .run();
+                .bind(lab_id, faculty_id, capitalizedName, capitalizedCompany, capitalizedLabLoc, device_type, status, ram, storage, cpu, ip_generation, last_maintenance_date, ink_levels, display_size, id)
+                .run();
             return success;
         },
         async deleteDevice(id) {
@@ -158,32 +220,32 @@ export const getDb = (db) => {
             const { success } = await db.prepare(
                 'UPDATE devices SET faculty_id = ?, lab_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE device_id = ?'
             )
-            .bind(new_faculty_id, device_id)
-            .run();
+                .bind(new_faculty_id, device_id)
+                .run();
             return success;
         },
         async reassignDeviceToLab(device_id, new_lab_id) {
             const { success } = await db.prepare(
                 'UPDATE devices SET lab_id = ?, faculty_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE device_id = ?'
             )
-            .bind(new_lab_id, device_id)
-            .run();
+                .bind(new_lab_id, device_id)
+                .run();
             return success;
         },
         async deselectDevice(device_id) {
             const { success } = await db.prepare(
                 'UPDATE devices SET faculty_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE device_id = ?'
             )
-            .bind(device_id)
-            .run();
+                .bind(device_id)
+                .run();
             return success;
         },
         async markDeviceAsDeadStock(device_id, remark) {
             const { success } = await db.prepare(
                 'UPDATE devices SET status = "dead_stock", remark = ?, updated_at = CURRENT_TIMESTAMP WHERE device_id = ?'
             )
-            .bind(remark, device_id)
-            .run();
+                .bind(remark, device_id)
+                .run();
             return success;
         },
 
@@ -199,34 +261,34 @@ export const getDb = (db) => {
 
             for (const part of parts) {
                 const newDeviceName = `${part.charAt(0).toUpperCase() + part.slice(1)} from ${originalDevice.device_name}`;
-                
+
                 // Create a new device for the dead stock part
                 statements.push(
                     db.prepare(
                         'INSERT INTO devices (device_name, device_type, status, remark, company, invoice_number) VALUES (?, ?, ?, ?, ?, ?)'
                     )
-                    .bind(
-                        newDeviceName,
-                        part, // 'mouse', 'keyboard', etc.
-                        'dead_stock',
-                        remark,
-                        originalDevice.company,
-                        originalDevice.invoice_number
-                    )
+                        .bind(
+                            newDeviceName,
+                            part, // 'mouse', 'keyboard', etc.
+                            'dead_stock',
+                            remark,
+                            originalDevice.company,
+                            originalDevice.invoice_number
+                        )
                 );
             }
-            
+
             // Update the original device's remark
             const newRemark = `Parts moved to dead stock: ${parts.join(', ')}. ${remark}`;
             const updatedRemark = originalDevice.remark ? `${originalDevice.remark}\n${newRemark}` : newRemark;
 
             statements.push(
                 db.prepare('UPDATE devices SET remark = ? WHERE device_id = ?')
-                .bind(updatedRemark, originalDeviceId)
+                    .bind(updatedRemark, originalDeviceId)
             );
 
             const results_batch = await db.batch(statements);
-            
+
             // Check if all statements in the batch were successful
             return results_batch.every(result => result.success);
         },
@@ -236,8 +298,8 @@ export const getDb = (db) => {
             const { success, meta } = await db.prepare(
                 'INSERT INTO users (email, password) VALUES (?, ?)'
             )
-            .bind(email, hashedPassword)
-            .run();
+                .bind(email, hashedPassword)
+                .run();
             if (success) {
                 return { success: true, user_id: meta.last_row_id };
             }
@@ -259,8 +321,8 @@ export const getDb = (db) => {
             const { success } = await db.prepare(
                 'UPDATE users SET google_id = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?'
             )
-            .bind(google_id, user_id)
-            .run();
+                .bind(google_id, user_id)
+                .run();
             return success;
         },
 
@@ -297,12 +359,12 @@ export const getDb = (db) => {
 
             return { statusSummary, typeStatusData };
         },
-        
+
         async getDeadStockReportData() {
             const deadStockDevices = await this.getAllDevices({ status: 'dead_stock' }); // Assuming getAllDevices can filter by status
             return { deadStockDevices };
         },
-        
+
         async getFacultyInventoryReportData() {
             const faculty = await this.getAllFaculty();
             const activeDevices = await this.getAllDevices({ status: 'active' }); // Fetch only active devices
@@ -344,24 +406,41 @@ export const getDb = (db) => {
             return { devices, labs, faculty };
         },
 
-        // Helper to get or create HOD Cabin Lab ID
         async getOrCreateHodCabinLabId() {
-            const HOD_CABIN_NAME = 'HOD Cabin';
-            let { results } = await db.prepare('SELECT lab_id FROM labs WHERE lab_name = ?').bind(HOD_CABIN_NAME).all();
-            if (results.length > 0) {
-                return results[0].lab_id;
-            } else {
-                // Create the HOD Cabin lab if it doesn't exist
+            const HOD_CABIN_NAME = 'Central Store';
+            const OLD_NAME = 'HOD Cabin';
+
+            try {
+                // First, check if Central Store exists
+                let { results } = await db.prepare('SELECT lab_id FROM labs WHERE lab_name = ?').bind(HOD_CABIN_NAME).all();
+                if (results && results.length > 0) {
+                    return results[0].lab_id;
+                }
+
+                // If not, check if HOD Cabin exists and rename it
+                let { results: oldResults } = await db.prepare('SELECT lab_id FROM labs WHERE lab_name = ?').bind(OLD_NAME).all();
+                if (oldResults && oldResults.length > 0) {
+                    const oldId = oldResults[0].lab_id;
+                    await db.prepare('UPDATE labs SET lab_name = ? WHERE lab_id = ?').bind(HOD_CABIN_NAME, oldId).run();
+                    console.log(`Renamed lab ${OLD_NAME} to ${HOD_CABIN_NAME} (ID: ${oldId})`);
+                    return oldId;
+                }
+
+                // If neither exists, create Central Store
                 const { success, meta } = await db.prepare(
                     'INSERT INTO labs (lab_name, location, capacity) VALUES (?, ?, ?)'
                 )
-                .bind(HOD_CABIN_NAME, 'HOD Cabin', 0) // Location and capacity can be default or null
-                .run();
+                    .bind(HOD_CABIN_NAME, 'Central Store', 0)
+                    .run();
                 if (success) {
+                    console.log(`Created new lab: ${HOD_CABIN_NAME}`);
                     return meta.last_row_id;
                 } else {
-                    throw new Error('Failed to create HOD Cabin lab');
+                    throw new Error('Failed to create Central Store lab');
                 }
+            } catch (error) {
+                console.error('Error in getOrCreateHodCabinLabId:', error);
+                throw error;
             }
         },
 
@@ -427,6 +506,58 @@ export const getDb = (db) => {
             } catch (error) {
                 throw error;
             }
+        },
+
+        async capitalizeExistingNames() {
+            const formatString = (str) => {
+                if (!str || str === 'N/A') return str;
+                return str.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+            };
+
+            const devices = await this.getAllDevices();
+            const labs = await this.getAllLabs();
+            const faculty = await this.getAllFaculty();
+
+            const statements = [];
+
+            devices.forEach(d => {
+                const capitalized = formatString(d.device_name);
+                if (capitalized !== d.device_name) {
+                    statements.push(
+                        db.prepare('UPDATE devices SET device_name = ? WHERE device_id = ?')
+                            .bind(capitalized, d.device_id)
+                    );
+                }
+            });
+
+            labs.forEach(l => {
+                const capitalized = formatString(l.lab_name);
+                if (capitalized !== l.lab_name) {
+                    statements.push(
+                        db.prepare('UPDATE labs SET lab_name = ? WHERE lab_id = ?')
+                            .bind(capitalized, l.lab_id)
+                    );
+                }
+            });
+
+            faculty.forEach(f => {
+                const capitalizedName = formatString(f.faculty_name);
+                const capitalizedDept = formatString(f.department);
+                if (capitalizedName !== f.faculty_name || capitalizedDept !== f.department) {
+                    statements.push(
+                        db.prepare('UPDATE faculty SET faculty_name = ?, department = ? WHERE faculty_id = ?')
+                            .bind(capitalizedName, capitalizedDept, f.faculty_id)
+                    );
+                }
+            });
+
+            if (statements.length === 0) return { success: true, count: 0 };
+
+            const results_batch = await db.batch(statements);
+            return {
+                success: results_batch.every(r => r.success),
+                count: statements.length
+            };
         },
     };
 };
