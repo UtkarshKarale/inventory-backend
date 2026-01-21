@@ -86,7 +86,7 @@ export const getDb = (db) => {
         },
 
         // Devices CRUD
-        async getAllDevices({ lab_id = null, faculty_id = null, status = null, device_type = null } = {}) {
+        async getAllDevices({ lab_id = null, faculty_id = null, device_type = null, status = null } = {}) {
             let query = `
                 SELECT 
                     d.device_id, 
@@ -106,8 +106,7 @@ export const getDb = (db) => {
                     d.display_size, 
                     d.invoice_number, 
                     d.remark, 
-                    d.updated_at, 
-                    CASE WHEN d.invoice_pdf IS NOT NULL AND d.invoice_pdf != '' THEN 1 ELSE 0 END as has_invoice_pdf 
+                    d.updated_at
                 FROM devices d
                 LEFT JOIN labs l ON d.lab_id = l.lab_id
             `;
@@ -122,10 +121,6 @@ export const getDb = (db) => {
                 conditions.push('d.faculty_id = ?');
                 bindings.push(faculty_id);
             }
-            if (status !== null) {
-                conditions.push('d.status = ?');
-                bindings.push(status);
-            }
             if (device_type !== null) {
                 if (Array.isArray(device_type)) {
                     conditions.push(`TRIM(d.device_type) IN (${device_type.map(() => '?').join(', ')})`);
@@ -134,6 +129,10 @@ export const getDb = (db) => {
                     conditions.push('TRIM(d.device_type) = ?');
                     bindings.push(device_type);
                 }
+            }
+            if (status !== null) {
+                conditions.push('d.status = ?');
+                bindings.push(status);
             }
 
             if (conditions.length > 0) {
@@ -215,6 +214,24 @@ export const getDb = (db) => {
             return success;
         },
 
+        async addInvoiceToDevices(invoice_number, invoice_pdf, device_ids) {
+            const statements = device_ids.map(device_id => {
+                return db.prepare(
+                    'UPDATE devices SET invoice_number = ?, invoice_pdf = ?, updated_at = CURRENT_TIMESTAMP WHERE device_id = ?'
+                ).bind(invoice_number, invoice_pdf, device_id);
+            });
+
+            if (statements.length === 0) {
+                return { success: true, count: 0 };
+            }
+
+            const results_batch = await db.batch(statements);
+            return {
+                success: results_batch.every(r => r.success),
+                count: statements.length
+            };
+        },
+
         // Device Management
         async reassignDevice(device_id, new_faculty_id) {
             const { success } = await db.prepare(
@@ -242,7 +259,7 @@ export const getDb = (db) => {
         },
         async markDeviceAsDeadStock(device_id, remark) {
             const { success } = await db.prepare(
-                'UPDATE devices SET status = "dead_stock", remark = ?, updated_at = CURRENT_TIMESTAMP WHERE device_id = ?'
+                'UPDATE devices SET status = "defective_stock", remark = ?, updated_at = CURRENT_TIMESTAMP WHERE device_id = ?'
             )
                 .bind(remark, device_id)
                 .run();
@@ -262,7 +279,7 @@ export const getDb = (db) => {
             for (const part of parts) {
                 const newDeviceName = `${part.charAt(0).toUpperCase() + part.slice(1)} from ${originalDevice.device_name}`;
 
-                // Create a new device for the dead stock part
+                // Create a new device for the defective stock part
                 statements.push(
                     db.prepare(
                         'INSERT INTO devices (device_name, device_type, status, remark, company, invoice_number) VALUES (?, ?, ?, ?, ?, ?)'
@@ -270,7 +287,7 @@ export const getDb = (db) => {
                         .bind(
                             newDeviceName,
                             part, // 'mouse', 'keyboard', etc.
-                            'dead_stock',
+                            'defective_stock',
                             remark,
                             originalDevice.company,
                             originalDevice.invoice_number
@@ -279,7 +296,7 @@ export const getDb = (db) => {
             }
 
             // Update the original device's remark
-            const newRemark = `Parts moved to dead stock: ${parts.join(', ')}. ${remark}`;
+            const newRemark = `Parts moved to defective stock: ${parts.join(', ')}. ${remark}`;
             const updatedRemark = originalDevice.remark ? `${originalDevice.remark}\n${newRemark}` : newRemark;
 
             statements.push(
@@ -331,7 +348,7 @@ export const getDb = (db) => {
 
             const totalDevices = allDevices.length;
             const activeDevices = allDevices.filter(d => d.status === 'active').length;
-            const deadStockDevices = allDevices.filter(d => d.status === 'dead_stock').length;
+            const defectiveStockDevices = allDevices.filter(d => d.status === 'defective_stock').length;
 
             const devicesByType = {};
             allDevices.forEach(device => {
@@ -341,19 +358,19 @@ export const getDb = (db) => {
             const statusSummary = {
                 'Total Devices': totalDevices,
                 'Active Devices': activeDevices,
-                'Dead Stock Devices': deadStockDevices,
+                'Defective Stock Devices': defectiveStockDevices,
             };
 
             const typeStatusData = [];
             for (const type in devicesByType) {
                 const count = devicesByType[type];
                 const active = allDevices.filter(d => d.device_type === type && d.status === 'active').length;
-                const dead_stock = allDevices.filter(d => d.device_type === type && d.status === 'dead_stock').length;
+                const defective_stock = allDevices.filter(d => d.device_type === type && d.status === 'defective_stock').length;
                 typeStatusData.push({
                     device_type: type,
                     total: count,
                     active: active,
-                    dead_stock: dead_stock,
+                    defective_stock: defective_stock,
                 });
             }
 
@@ -361,8 +378,8 @@ export const getDb = (db) => {
         },
 
         async getDeadStockReportData() {
-            const deadStockDevices = await this.getAllDevices({ status: 'dead_stock' }); // Assuming getAllDevices can filter by status
-            return { deadStockDevices };
+            const defectiveStockDevices = await this.getAllDevices({ status: 'defective_stock' }); // Assuming getAllDevices can filter by status
+            return { defectiveStockDevices };
         },
 
         async getFacultyInventoryReportData() {
@@ -451,6 +468,7 @@ export const getDb = (db) => {
                     totalFaculty,
                     totalDevices,
                     totalComputers,
+                    totalLaptops,
                     totalPrinters,
                     totalDigitalBoards,
                     totalPointers,
@@ -464,7 +482,8 @@ export const getDb = (db) => {
                 ] = await Promise.all([
                     db.prepare('SELECT COUNT(*) as count FROM faculty').first(),
                     db.prepare("SELECT COUNT(*) as count FROM devices WHERE status = 'active'").first(),
-                    db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) IN ('laptop', 'desktop', 'server', 'monitor') AND status = 'active'").first(),
+                    db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) IN ('desktop', 'server', 'monitor') AND status = 'active'").first(),
+                    db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'laptop' AND status = 'active'").first(),
                     db.prepare('SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = "printer" AND status = \'active\'').first(),
                     db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'digital_board' AND status = 'active'").first(),
                     db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'pointer' AND status = 'active'").first(),
@@ -473,7 +492,7 @@ export const getDb = (db) => {
                     db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'mouse' AND status = 'active'").first(),
                     db.prepare("SELECT COUNT(*) as count FROM devices WHERE TRIM(device_type) = 'keyboard' AND status = 'active'").first(),
                     db.prepare("SELECT COUNT(*) as count FROM devices WHERE device_type IN ('laptop', 'desktop', 'server', 'monitor') AND status = 'active'").first(),
-                    db.prepare("SELECT COUNT(*) as count FROM devices WHERE status = 'dead_stock'").first(),
+                    db.prepare("SELECT COUNT(*) as count FROM devices WHERE status = 'defective_stock'").first(),
                     db.prepare(`
                         SELECT
                             l.lab_id,
@@ -490,6 +509,7 @@ export const getDb = (db) => {
                     totalFaculty: totalFaculty.count,
                     totalDevices: totalDevices.count,
                     totalComputers: totalComputers.count,
+                    totalLaptops: totalLaptops.count,
                     totalPrinters: totalPrinters.count,
                     totalDigitalBoards: totalDigitalBoards.count,
                     totalPointers: totalPointers.count,
@@ -499,7 +519,7 @@ export const getDb = (db) => {
                     totalKeyboards: totalKeyboards.count,
                     computersByStatus: {
                         active: totalComputersActive.count,
-                        dead_stock: totalComputersDeadStock.count,
+                        defective_stock: totalComputersDeadStock.count,
                     },
                     devicesByLab: devicesByLab.results,
                 };

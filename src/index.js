@@ -355,7 +355,7 @@ router.get('/api/reports/system-status', async (request, env) => {
     }
 });
 
-router.get('/api/reports/dead-stock', async (request, env) => {
+router.get('/api/reports/defective-stock', async (request, env) => {
     const db = getDb(env.DB);
     try {
         const reportData = await db.getDeadStockReportData();
@@ -363,7 +363,7 @@ router.get('/api/reports/dead-stock', async (request, env) => {
             headers: { 'Content-Type': 'application/json' },
         });
     } catch (error) {
-        return new Response(`Error fetching dead stock report: ${error.message}`, { status: 500 });
+        return new Response(`Error fetching defective stock report: ${error.message}`, { status: 500 });
     }
 });
 
@@ -717,6 +717,42 @@ router.post('/api/devices', async (request, env) => {
     }
 });
 
+router.post('/api/invoices', async (request, env) => {
+    const db = getDb(env.DB);
+    try {
+        const formData = await request.formData();
+        const invoice_number = formData.get('invoice_number');
+        const invoice_pdf = formData.get('invoice_pdf');
+        const device_ids_json = formData.get('device_ids');
+        const device_ids = JSON.parse(device_ids_json);
+
+        if (!invoice_number || !invoice_pdf || !device_ids || device_ids.length === 0) {
+            return new Response('Invoice number, PDF, and at least one device ID are required', { status: 400 });
+        }
+
+        if (invoice_pdf.size > 1024 * 1024) { // 1MB limit
+            return new Response('Invoice PDF size cannot exceed 1MB.', { status: 400 });
+        }
+
+        const arrayBuffer = await invoice_pdf.arrayBuffer();
+        const invoicePdfBase64 = arrayBufferToBase64(arrayBuffer);
+
+        const { success, count } = await db.addInvoiceToDevices(invoice_number, invoicePdfBase64, device_ids);
+
+        if (success) {
+            return new Response(JSON.stringify({ message: `Invoice added to ${count} devices successfully` }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+            });
+        } else {
+            return new Response('Failed to add invoice to devices', { status: 500 });
+        }
+    } catch (error) {
+        return new Response(`Error adding invoice: ${error.message}`, { status: 500 });
+    }
+});
+
+
 router.get('/api/devices/:id', async (request, env) => {
     const db = getDb(env.DB);
     try {
@@ -913,8 +949,6 @@ router.put('/api/devices/:id/deadstock-parts', async (request, env) => {
     }
 });
 
-// Final 404 handler (placed last)
-router.all('*', () => new Response('Not Found.', { status: 404 }));
 
 router.get('/api/maintenance/capitalize-names', async (request, env) => {
     const db = getDb(env.DB);
@@ -927,6 +961,25 @@ router.get('/api/maintenance/capitalize-names', async (request, env) => {
         return new Response(`Error during name capitalization: ${error.message}`, { status: 500 });
     }
 });
+
+router.get('/api/maintenance/migrate-defective-stock', async (request, env) => {
+    try {
+        const { success, meta } = await env.DB.prepare(
+            "UPDATE devices SET status = 'defective_stock' WHERE status = 'dead_stock'"
+        ).run();
+        return new Response(JSON.stringify({
+            message: 'Migration to defective_stock completed successfully',
+            rowsUpdated: meta.changes
+        }), {
+            headers: { 'Content-Type': 'application/json' },
+        });
+    } catch (error) {
+        return new Response(`Error during migration: ${error.message}`, { status: 500 });
+    }
+});
+
+// Final 404 handler (placed last)
+router.all('*', () => new Response('Not Found.', { status: 404 }));
 
 export default {
     async fetch(request, env, ctx) {
